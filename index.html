@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gibson Spot vs TC Delta Calculator V1</title>
+
+<!--
+    The little anchor icon that shows up in the browser tab.
+    It's drawn inline as an SVG (vector image) — no external file needed.
+-->
+<link rel="icon" type="image/svg+xml"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231f2335'/><text y='72' x='50' text-anchor='middle' font-size='62'>⚓</text></svg>">
+
+<!--
+    jsPDF is a third-party library that lets a web page generate a PDF file.
+    We load it from a public CDN (a fast file mirror). No install needed.
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+/* ─────────────────────────────────────────────────────────────────────
+   TOKYO NIGHT COLOUR PALETTE — identical to V3.
+   These are the dark-theme colours you see on screen.
+   When we export to PDF or PNG we swap to a light "print" palette
+   (defined in JavaScript further down) so it looks good on white paper.
+
+   bg:      #1a1b26   surface: #1f2335   panel:   #16161e
+   overlay: #24283b   border:  #292e42
+   text:    #c0caf5   muted:   #a9b1d6   dim:     #565f89
+   blue:    #7aa2f7   purple:  #bb9af7   cyan:    #7dcfff
+   green:   #9ece6a   red:     #f7768e   orange:  #ff9e64
+   yellow:  #e0af68
+   ───────────────────────────────────────────────────────────────────── */
+
+/* The * selector means "every element". We zero out browser defaults
+   so spacing is predictable. box-sizing:border-box makes width
+   include padding+border, which is much more intuitive. */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Page background and base font.
+   The 135deg gradient gives a subtle slope from dark grey to dark blue. */
+body {
+    font-family: 'Calibri', 'Candara', 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #1a1b26 0%, #24283b 100%);
+    min-height: 100vh;          /* always fills the screen vertically */
+    padding: 20px;
+}
+
+/* The white-bordered card holding the whole app. */
+.container {
+    max-width: 1800px;          /* don't stretch absurdly wide on big monitors */
+    margin: 0 auto;             /* centre horizontally */
+    background: #1a1b26;
+    border-radius: 20px;        /* rounded corners */
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);  /* soft drop shadow */
+    overflow: hidden;
+    border: 1px solid #292e42;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.header {
+    background: linear-gradient(135deg, #3d59a1 0%, #1a1b26 100%);
+    color: #c0caf5;
+    padding: 40px 30px;
+    text-align: center;
+    position: relative;         /* allows children with position:absolute to anchor here */
+    border-bottom: 2px solid #292e42;
+}
+.gibson-branding-top {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: #7aa2f7;
+    margin-bottom: 15px;
+    letter-spacing: 2px;
+}
+.header h1 { font-size: 2.5em; margin-bottom: 10px; color: #c0caf5; }
+.header p  { font-size: 1.1em; color: #a9b1d6; }
+
+/* "Created by..." sits in the bottom-right of the header.
+   position:absolute pulls it out of normal flow and pins it. */
+.creator-credit {
+    position: absolute;
+    bottom: 10px;
+    right: 30px;
+    font-size: 0.75em;
+    color: #ffffff;
+    font-style: normal;
+    font-weight: 700;
+}
+
+/* ── Two-column layout ──────────────────────────────────────────────── */
+/* CSS Grid: left column is exactly 380px, right column eats the rest (1fr). */
+.content {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+}
+
+.inputs-panel {
+    background: #16161e;
+    padding: 30px;
+    border-right: 2px solid #292e42;
+    overflow-y: auto;                    /* scroll if inputs taller than the panel */
+    max-height: calc(100vh - 250px);     /* don't taller than viewport minus header */
+}
+
+.chart-panel {
+    padding: 30px;
+    background: #1f2335;
+    overflow-y: auto;
+    max-height: calc(100vh - 250px);
+}
+
+/* ── Input group cards ──────────────────────────────────────────────── */
+.input-group {
+    margin-bottom: 25px;
+    background: #24283b;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #292e42;
+}
+.input-group h3 {
+    color: #7aa2f7;
+    margin-bottom: 15px;
+    font-size: 1.1em;
+    border-bottom: 2px solid #3d59a1;
+    padding-bottom: 8px;
+}
+.input-row { margin-bottom: 15px; }
+.input-row label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #a9b1d6;
+    font-size: 0.9em;
+}
+.input-row input, .input-row select {
+    width: 100%;
+    padding: 10px;
+    background: #1f2335;
+    border: 2px solid #292e42;
+    border-radius: 6px;
+    font-size: 0.95em;
+    color: #c0caf5;
+    font-family: inherit;
+    transition: border-color 0.3s;
+}
+.input-row input:focus, .input-row select:focus {
+    outline: none;
+    border-color: #7aa2f7;       /* blue glow when typing */
+}
+/* Read-only field (used for the derived breakeven number) is dimmer
+   so the user can see at a glance that they can't edit it. */
+.input-row input[readonly] {
+    background: #1a1b26;
+    color: #e0af68;              /* gold — same colour we use for TC margin card */
+    font-weight: 700;
+    cursor: not-allowed;
+}
+.input-row small {
+    display: block;
+    color: #565f89;
+    margin-top: 3px;
+    font-size: 0.85em;
+    line-height: 1.4;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+.button-group {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 20px;
+}
+.calculate-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, #9ece6a 0%, #73b840 100%);
+    color: #1a1b26;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+}
+.calculate-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(158, 206, 106, 0.35);
+}
+.download-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, #7aa2f7 0%, #3d59a1 100%);
+    color: #1a1b26;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+}
+.download-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(122, 162, 247, 0.35);
+}
+.share-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, #e0af68 0%, #c89b3c 100%);
+    color: #1a1b26;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+}
+.share-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(224, 175, 104, 0.35);
+}
+
+/* ── Error banner ───────────────────────────────────────────────────── */
+/* Hidden by default. JavaScript switches its display to 'block' and fills
+   in the message when validation fails. */
+.error-banner {
+    display: none;
+    background: #2d1b22;
+    border: 1px solid #f7768e;
+    color: #f7768e;
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 0.92em;
+    line-height: 1.5;
+    font-weight: 600;
+}
+.error-banner strong { color: #ff9e64; }
+
+/* ── Results summary cards (top of right panel) ─────────────────────── */
+.results-summary {
+    background: #16161e;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);   /* 4 equal columns */
+    gap: 15px;
+    border: 1px solid #292e42;
+}
+.result-card {
+    background: #24283b;
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #292e42;
+}
+.result-card h4 {
+    color: #565f89;
+    font-size: 0.9em;
+    margin-bottom: 8px;
+}
+.result-card .value {
+    font-size: 1.6em;
+    font-weight: 700;
+    color: #7aa2f7;        /* default blue (used by the Spot margin card) */
+}
+/* Different value colours for the four cards — toggled in JavaScript. */
+.result-card .value.negative { color: #f7768e; }
+.result-card .value.positive { color: #9ece6a; }
+.result-card .value.gold     { color: #e0af68; }
+.result-card .value.purple   { color: #bb9af7; }
+.result-card .sublabel {
+    color: #565f89;
+    font-size: 0.72em;
+    margin-top: 4px;
+}
+
+/* ── Heatmap canvas ─────────────────────────────────────────────────── */
+.canvas-container {
+    position: relative;
+    background: #24283b;
+    border-radius: 10px;
+    padding: 20px;
+    border: 1px solid #292e42;
+    margin-bottom: 30px;
+}
+.chart-title {
+    text-align: center;
+    font-size: 1.3em;
+    font-weight: bold;
+    color: #7aa2f7;
+    margin-bottom: 15px;
+}
+canvas {
+    display: block;
+    margin: 0 auto;
+    cursor: crosshair;       /* hint that hovering does something */
+    border: 1px solid #292e42;
+    border-radius: 5px;
+    max-width: 100%;
+    height: auto;
+}
+
+/* The little floating box that follows your mouse over the heatmap. */
+#tooltip {
+    position: fixed;
+    background: #24283b;
+    color: #c0caf5;
+    border: 1px solid #7aa2f7;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    pointer-events: none;    /* clicks pass through */
+    display: none;
+    z-index: 1000;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    line-height: 1.6;
+}
+
+/* Footer watermark below the heatmap */
+.gibson-watermark { text-align: center; margin-top: 12px; }
+.gibson-watermark span {
+    font-weight: 700;
+    color: #3d59a1;
+    font-size: 0.8em;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/* On smaller screens stack the columns instead of side-by-side. */
+@media (max-width: 1400px) {
+    .content { grid-template-columns: 1fr; }
+    .inputs-panel {
+        max-height: none;
+        border-right: none;
+        border-bottom: 2px solid #292e42;
+    }
+}
+
+/* ── What's New button + modal (empty content for V1, but pattern is here) */
+.whats-new-btn {
+    position: absolute;
+    top: 18px;
+    right: 20px;
+    background: linear-gradient(135deg, #bb9af7 0%, #9d7cd8 100%);
+    color: #1a1b26;
+    border: none;
+    border-radius: 20px;
+    padding: 7px 16px;
+    font-size: 0.82em;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    z-index: 10;
+    font-family: inherit;
+}
+.whats-new-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(187, 154, 247, 0.45);
+}
+.whats-new-badge {
+    display: inline-block;
+    background: #f7768e;
+    color: #fff;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 0.7em;
+    line-height: 16px;
+    text-align: center;
+    margin-left: 5px;
+    font-weight: 800;
+    vertical-align: middle;
+}
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;                              /* covers the whole screen */
+    background: rgba(10, 10, 20, 0.75);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+    background: #1f2335;
+    border: 1px solid #3d59a1;
+    border-radius: 14px;
+    width: min(680px, 92vw);
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 32px 36px;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+.modal-close {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    background: none;
+    border: none;
+    color: #565f89;
+    font-size: 1.4em;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.2s;
+}
+.modal-close:hover { color: #f7768e; }
+.modal h2 { color: #7aa2f7; font-size: 1.3em; margin-bottom: 6px; }
+.modal .modal-subtitle { color: #565f89; font-size: 0.82em; margin-bottom: 24px; }
+.modal .empty-state {
+    color: #565f89;
+    font-size: 0.95em;
+    line-height: 1.6;
+    text-align: center;
+    padding: 30px 10px;
+    font-style: italic;
+}
+
+/* Toast notification that pops up when share link is copied. */
+.share-toast {
+    display: none;
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #9ece6a;
+    color: #1a1b26;
+    font-weight: 700;
+    padding: 10px 24px;
+    border-radius: 24px;
+    font-size: 0.95em;
+    z-index: 3000;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+    pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- ─────────── HEADER ─────────── -->
+    <div class="header">
+        <div class="gibson-branding-top">GIBSON SHIPBROKERS</div>
+        <h1>⚓ Gibson Spot vs TC Delta Calculator V1</h1>
+        <p>Interactive heatmap comparing daily margin from spot trading vs time charter</p>
+        <div class="creator-credit">Created by Sriniwas Ghate, S&amp;P Department</div>
+        <button class="whats-new-btn" onclick="openChangelog()">What's new?</button>
+    </div>
+
+    <!-- ─────────── WHAT'S NEW MODAL (empty for V1, structure preserved) ─────────── -->
+    <div class="modal-overlay" id="changelogOverlay" onclick="closeChangelogOutside(event)">
+        <div class="modal" id="changelogModal">
+            <button class="modal-close" onclick="closeChangelog()" title="Close">&times;</button>
+            <h2>What's New</h2>
+            <p class="modal-subtitle">Spot vs TC Delta Calculator &mdash; release notes</p>
+            <div class="empty-state">
+                V1 — initial release.<br>
+                Future updates will be logged here.
+            </div>
+        </div>
+    </div>
+
+    <!-- ─────────── MAIN TWO-COLUMN AREA ─────────── -->
+    <div class="content">
+
+        <!-- ====== LEFT: INPUTS PANEL ====== -->
+        <div class="inputs-panel">
+
+            <!-- Chart Settings -->
+            <div class="input-group">
+                <h3>📊 Chart Settings</h3>
+                <div class="input-row">
+                    <label for="chartTitle">Chart Title</label>
+                    <input type="text" id="chartTitle" value="Kamsarmax — Spot vs TC Delta Analysis" />
+                </div>
+            </div>
+
+            <!-- Vessel -->
+            <div class="input-group">
+                <h3>🚢 Vessel</h3>
+                <div class="input-row">
+                    <label for="vesselType">Vessel Type</label>
+                    <select id="vesselType">
+                        <optgroup label="Dry Bulk">
+                            <option value="Handy">Handy</option>
+                            <option value="Supramax">Supramax</option>
+                            <option value="Ultramax">Ultramax</option>
+                            <option value="Panamax">Panamax</option>
+                            <option value="Kamsarmax" selected>Kamsarmax</option>
+                            <option value="Capesize">Capesize</option>
+                            <option value="Newcastlemax">Newcastlemax</option>
+                        </optgroup>
+                        <optgroup label="Tanker — Clean">
+                            <option value="MR">MR</option>
+                            <option value="LR1">LR1</option>
+                            <option value="LR2">LR2</option>
+                        </optgroup>
+                        <optgroup label="Tanker — Dirty">
+                            <option value="Aframax">Aframax</option>
+                            <option value="Suezmax">Suezmax</option>
+                            <option value="VLCC">VLCC</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="input-row">
+                    <label for="utilisation">Utilisation % on Spot</label>
+                    <input type="number" id="utilisation" value="92" min="0" max="100" step="1" />
+                    <small>Accounts for ballast / positioning / waiting days on spot that don't exist on TC.</small>
+                </div>
+            </div>
+
+            <!-- Daily Costs -->
+            <div class="input-group">
+                <h3>⚙️ Daily Costs</h3>
+                <div class="input-row">
+                    <label for="opex">OpEx ($/day)</label>
+                    <input type="number" id="opex" value="6500" step="100" min="0" />
+                </div>
+                <div class="input-row">
+                    <label for="capex">CapEx ($/day)</label>
+                    <input type="number" id="capex" value="7000" step="100" min="0" />
+                </div>
+                <div class="input-row">
+                    <label for="breakeven">Daily Breakeven ($/day)</label>
+                    <!-- This input is read-only — its value is filled in automatically
+                         by the JavaScript whenever OpEx or CapEx changes. -->
+                    <input type="text" id="breakeven" value="$13,500" readonly />
+                    <small>Auto-calculated: OpEx + CapEx</small>
+                </div>
+            </div>
+
+            <!-- Spot TCE -->
+            <div class="input-group">
+                <h3>💵 Spot TCE</h3>
+                <div class="input-row">
+                    <label for="spotBase">Spot TCE Base ($/day)</label>
+                    <input type="number" id="spotBase" value="18000" step="500" />
+                </div>
+                <div class="input-row">
+                    <label for="spotMin">Spot TCE Min ($/day)</label>
+                    <input type="number" id="spotMin" value="8000" step="500" />
+                </div>
+                <div class="input-row">
+                    <label for="spotMax">Spot TCE Max ($/day)</label>
+                    <input type="number" id="spotMax" value="35000" step="500" />
+                </div>
+            </div>
+
+            <!-- TC Rate -->
+            <div class="input-group">
+                <h3>💵 TC Rate</h3>
+                <div class="input-row">
+                    <label for="tcBase">TC Rate Base ($/day)</label>
+                    <input type="number" id="tcBase" value="15500" step="500" />
+                </div>
+                <div class="input-row">
+                    <label for="tcMin">TC Rate Min ($/day)</label>
+                    <input type="number" id="tcMin" value="10000" step="500" />
+                </div>
+                <div class="input-row">
+                    <label for="tcMax">TC Rate Max ($/day)</label>
+                    <input type="number" id="tcMax" value="22000" step="500" />
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="button-group">
+                <button class="calculate-btn" onclick="calculateDelta()">🔥 Calculate Delta</button>
+                <button class="download-btn" onclick="downloadPDF()">📥 Download PDF Report</button>
+                <button class="download-btn" onclick="downloadPNG()" style="background: linear-gradient(135deg, #bb9af7 0%, #9d7cd8 100%);">📸 Download Chart as PNG</button>
+                <button class="share-btn" onclick="shareLink()">🔗 Copy Share Link</button>
+            </div>
+        </div>
+
+        <!-- ====== RIGHT: CHART PANEL ====== -->
+        <div class="chart-panel">
+
+            <!-- Hidden by default, shown by JavaScript on bad input. -->
+            <div class="error-banner" id="errorBanner"></div>
+
+            <!-- Four result cards -->
+            <div class="results-summary" id="results">
+                <div class="result-card">
+                    <h4>Spot Margin</h4>
+                    <div class="value" id="spotMargin">—</div>
+                    <div class="sublabel">(Spot TCE × Util) − Breakeven</div>
+                </div>
+                <div class="result-card">
+                    <h4>TC Margin</h4>
+                    <div class="value gold" id="tcMargin">—</div>
+                    <div class="sublabel">TC Rate − Breakeven</div>
+                </div>
+                <div class="result-card">
+                    <h4>Base Delta</h4>
+                    <div class="value" id="baseDelta">—</div>
+                    <div class="sublabel">Spot Margin − TC Margin</div>
+                </div>
+                <div class="result-card">
+                    <h4>Annual Delta</h4>
+                    <div class="value purple" id="annualDelta">—</div>
+                    <div class="sublabel">Base Delta × 365</div>
+                </div>
+            </div>
+
+            <!-- Heatmap -->
+            <div class="canvas-container">
+                <div class="chart-title" id="chartTitleDisplay"></div>
+                <canvas id="heatmapCanvas"></canvas>
+                <div id="tooltip"></div>
+                <div class="gibson-watermark"><span>Gibson Shipbrokers</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="share-toast" id="shareToast">🔗 Link copied to clipboard!</div>
+
+<script>
+/* ──────────────────────────────────────────────────────────────────────
+   THEMES
+   Two colour sets: TN is the dark palette you see on screen.
+   EXPORT_THEME is the light palette used when generating PDF / PNG so
+   the chart prints cleanly on white paper.
+   ────────────────────────────────────────────────────────────────────── */
+const TN = {
+    bg:     '#1f2335',
+    overlay:'#24283b',
+    border: '#292e42',
+    text:   '#c0caf5',
+    muted:  '#a9b1d6',
+    dim:    '#565f89',
+    contour:'#1a1b26',   // bold zero-delta contour (dark — readable on yellow)
+};
+
+const EXPORT_THEME = {
+    bg:     '#ffffff',
+    overlay:'#f5f5f5',
+    border: '#cccccc',
+    text:   '#1a1a2e',
+    muted:  '#444444',
+    dim:    '#888888',
+    contour:'#000000',
+};
+
+/* Module-level state — populated by calculateDelta() and read by the
+   tooltip handler and the export functions. Using let (not const)
+   because we reassign these on each calculation. */
+let deltaMatrix = null;        // 2D array of delta values, [row][col]
+let spotLabels = [];           // x-axis labels (spot TCE) e.g. "$18,000"
+let tcLabels = [];             // y-axis labels (TC rate)
+let spotValues = [];           // raw numeric x-axis values
+let tcValues = [];             // raw numeric y-axis values
+let currentInputs = null;      // snapshot of inputs at last calculate
+
+/* ──────────────────────────────────────────────────────────────────────
+   READ INPUTS FROM THE FORM
+   document.getElementById('x') grabs the HTML element with id="x".
+   parseFloat() converts the text in the box ("18000") into a number (18000).
+   We store everything in a plain object so the rest of the code can pass
+   it around as one bundle.
+   ────────────────────────────────────────────────────────────────────── */
+function readInputs() {
+    return {
+        chartTitle:  document.getElementById('chartTitle').value,
+        vesselType:  document.getElementById('vesselType').value,
+        utilisation: parseFloat(document.getElementById('utilisation').value),
+        opex:        parseFloat(document.getElementById('opex').value),
+        capex:       parseFloat(document.getElementById('capex').value),
+        spotBase:    parseFloat(document.getElementById('spotBase').value),
+        spotMin:     parseFloat(document.getElementById('spotMin').value),
+        spotMax:     parseFloat(document.getElementById('spotMax').value),
+        tcBase:      parseFloat(document.getElementById('tcBase').value),
+        tcMin:       parseFloat(document.getElementById('tcMin').value),
+        tcMax:       parseFloat(document.getElementById('tcMax').value),
+    };
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   VALIDATION
+   Returns null if everything's fine, or a string describing the problem.
+   We collect ALL the issues at once and join them with line breaks so
+   the user can fix them in a single pass instead of fixing-saving-fixing
+   one at a time.
+   ────────────────────────────────────────────────────────────────────── */
+function validateInputs(i) {
+    const errors = [];
+
+    // Check that no field is blank or non-numeric.
+    // isNaN("abc") is true; isNaN(15) is false.
+    const numericFields = {
+        utilisation: 'Utilisation', opex: 'OpEx', capex: 'CapEx',
+        spotBase: 'Spot TCE Base', spotMin: 'Spot TCE Min', spotMax: 'Spot TCE Max',
+        tcBase:   'TC Rate Base',  tcMin:   'TC Rate Min',  tcMax:   'TC Rate Max',
+    };
+    for (const key in numericFields) {
+        if (isNaN(i[key])) errors.push(`${numericFields[key]} is missing or not a number.`);
+    }
+    if (errors.length) return errors.join('<br>');     // bail early — no point checking ranges
+
+    // Utilisation must be a percentage — between 0 and 100 inclusive.
+    if (i.utilisation < 0 || i.utilisation > 100) {
+        errors.push('Utilisation % must be between 0 and 100.');
+    }
+
+    // Min must be strictly less than Max for both ranges, otherwise the
+    // heatmap axis collapses to a single value.
+    if (i.spotMin >= i.spotMax) errors.push('Spot TCE Min must be less than Spot TCE Max.');
+    if (i.tcMin   >= i.tcMax)   errors.push('TC Rate Min must be less than TC Rate Max.');
+
+    // Base values must sit inside their ranges, otherwise the "base case"
+    // numbers in the result cards wouldn't appear on the heatmap.
+    if (i.spotBase < i.spotMin || i.spotBase > i.spotMax) {
+        errors.push('Spot TCE Base must be between Spot TCE Min and Spot TCE Max.');
+    }
+    if (i.tcBase < i.tcMin || i.tcBase > i.tcMax) {
+        errors.push('TC Rate Base must be between TC Rate Min and TC Rate Max.');
+    }
+
+    // Sanity guards on costs — daily figures should be positive.
+    if (i.opex < 0)  errors.push('OpEx cannot be negative.');
+    if (i.capex < 0) errors.push('CapEx cannot be negative.');
+
+    return errors.length ? errors.join('<br>') : null;
+}
+
+function showError(message) {
+    const banner = document.getElementById('errorBanner');
+    banner.innerHTML = '<strong>Cannot calculate:</strong><br>' + message;
+    banner.style.display = 'block';
+}
+function clearError() {
+    document.getElementById('errorBanner').style.display = 'none';
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   FORMATTING HELPERS
+   Turn raw numbers into the "$18,000" / "$1,235,000" strings we display.
+   Intl.NumberFormat is built into every modern browser — handy and fast.
+   ────────────────────────────────────────────────────────────────────── */
+const fmtMoney  = n => '$' + Math.round(n).toLocaleString('en-US');
+// Signed version: shows "+" for positive, "−" for negative. Used on deltas.
+const fmtSigned = n => (n >= 0 ? '+' : '−') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
+
+/* ──────────────────────────────────────────────────────────────────────
+   AUTO-UPDATE THE DERIVED BREAKEVEN BOX
+   This runs every time the user types in the OpEx or CapEx field.
+   It does NOT trigger a full calculate — that's still manual via the button.
+   ────────────────────────────────────────────────────────────────────── */
+function updateBreakevenDisplay() {
+    const opex = parseFloat(document.getElementById('opex').value);
+    const capex = parseFloat(document.getElementById('capex').value);
+    const breakevenBox = document.getElementById('breakeven');
+    if (isNaN(opex) || isNaN(capex)) {
+        breakevenBox.value = '—';
+    } else {
+        breakevenBox.value = fmtMoney(opex + capex);
+    }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   COLOUR SCALE FOR HEATMAP CELLS
+   We feed in a delta value plus the min/max delta in the grid, and get
+   back a CSS rgb() colour string.
+
+   Logic: the colour is centred on zero. Negative → red, zero → yellow,
+   positive → green. We use the larger absolute extreme to scale, so
+   the gradient stays symmetric — a delta of -$2,000 reads as red of
+   the same intensity that +$2,000 reads as green.
+   ────────────────────────────────────────────────────────────────────── */
+function lerp(a, b, t) {                // simple linear interpolation
+    return Math.round(a + (b - a) * t);
+}
+function rgb(r, g, b) {
+    return `rgb(${r},${g},${b})`;
+}
+function getColorForDelta(delta, absMax) {
+    if (absMax === 0) return rgb(252, 191, 73);   // pure yellow if grid is flat
+    // Normalise to range -1 (most negative) … 0 (zero) … +1 (most positive)
+    let t = delta / absMax;
+    if (t < -1) t = -1;
+    if (t > 1)  t = 1;
+
+    if (t < 0) {
+        // Negative side: interpolate red → yellow.
+        // u runs 0 (most negative) → 1 (zero).
+        const u = 1 + t;
+        return rgb(lerp(214, 252, u), lerp(40, 191, u), lerp(40, 73, u));
+    } else {
+        // Positive side: interpolate yellow → green.
+        const u = t;
+        return rgb(lerp(252, 67, u), lerp(191, 170, u), lerp(73, 139, u));
+    }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   BUILD THE 10×10 GRID OF DELTA VALUES
+   Spot TCE goes along the X axis, TC rate along the Y axis.
+   Each cell stores: (Spot × utilisation) − TC.
+   ────────────────────────────────────────────────────────────────────── */
+function buildDeltaMatrix(inputs) {
+    const N = 10;                                       // 10 steps each axis
+    const util = inputs.utilisation / 100;              // convert % → fraction
+
+    // Build the axis value arrays. linspace-style: 10 evenly-spaced points
+    // from min to max inclusive.
+    spotValues = [];
+    for (let j = 0; j < N; j++) {
+        spotValues.push(inputs.spotMin + (inputs.spotMax - inputs.spotMin) * j / (N - 1));
+    }
+    tcValues = [];
+    for (let i = 0; i < N; i++) {
+        tcValues.push(inputs.tcMin + (inputs.tcMax - inputs.tcMin) * i / (N - 1));
+    }
+
+    // Pretty string versions for axis labels.
+    spotLabels = spotValues.map(fmtMoney);
+    tcLabels = tcValues.map(fmtMoney);
+
+    // Now compute the deltas. matrix[i][j] = delta when TC = tcValues[i], Spot = spotValues[j].
+    const matrix = [];
+    for (let i = 0; i < N; i++) {
+        const row = [];
+        for (let j = 0; j < N; j++) {
+            // (Spot TCE × utilisation) − TC rate
+            // Note: breakeven cancels out when you take the delta of the two
+            // margins, so it doesn't appear here. See conversation note.
+            row.push(spotValues[j] * util - tcValues[i]);
+        }
+        matrix.push(row);
+    }
+    return matrix;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   DRAW THE HEATMAP
+   ctx is a 2D drawing context — think of it like a paintbrush onto the
+   canvas. We tell it where to move, what colour to use, and what to draw.
+   The same renderer is used for the live on-screen heatmap and for the
+   PDF/PNG export — we just pass a different theme each time.
+   ────────────────────────────────────────────────────────────────────── */
+function renderHeatmap(ctx, canvasWidth, canvasHeight, matrix, theme, title) {
+    const nRows = matrix.length;            // TC axis (Y)
+    const nCols = matrix[0].length;         // Spot axis (X)
+
+    // Margins (in pixels) leave room for axis labels, title, and colour bar.
+    const mL = 100, mR = 170, mT = 60, mB = 110;
+    const plotW = canvasWidth - mL - mR;
+    const plotH = canvasHeight - mT - mB;
+    const cw = plotW / nCols;               // cell width
+    const ch = plotH / nRows;               // cell height
+
+    // Find the most extreme delta so we can centre the colour scale on zero.
+    let absMax = 0;
+    for (const row of matrix) {
+        for (const v of row) {
+            if (Math.abs(v) > absMax) absMax = Math.abs(v);
+        }
+    }
+
+    // Background fill.
+    ctx.fillStyle = theme.bg;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Title across the top margin.
+    if (title) {
+        ctx.font = 'bold 15px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = theme.text;
+        ctx.fillText(title, canvasWidth / 2, mT / 2);
+    }
+
+    // ── Cells ──
+    // We loop over rows top-to-bottom on screen, but row index 0 is the
+    // SMALLEST TC rate (which we want at the BOTTOM of the chart, like a
+    // normal Y axis). So we flip with (nRows - 1 - i).
+    for (let i = 0; i < nRows; i++) {
+        for (let j = 0; j < nCols; j++) {
+            const x = mL + j * cw;
+            const y = mT + (nRows - 1 - i) * ch;
+            const delta = matrix[i][j];
+
+            // Fill the cell with its colour.
+            ctx.fillStyle = getColorForDelta(delta, absMax);
+            ctx.fillRect(x, y, cw, ch);
+
+            // Thin grid line around the cell.
+            ctx.strokeStyle = theme.border;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, cw, ch);
+
+            // Write the delta value inside the cell.
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Dark text on light cells, white text on the deep red end.
+            ctx.fillStyle = (delta < -absMax * 0.5) ? '#ffffff' : '#1a1b26';
+            // Show as e.g. "+2.5k" or "-0.8k" — fits nicely in a small cell.
+            const display = (delta >= 0 ? '+' : '−') + (Math.abs(delta) / 1000).toFixed(1) + 'k';
+            ctx.fillText(display, x + cw / 2, y + ch / 2);
+        }
+    }
+
+    // ── Bold zero-delta contour line ──
+    // For every adjacent pair of cells (left/right or up/down), if the
+    // delta sign flips, the zero line crosses between them. We draw a
+    // short fat segment along that boundary. Visually this traces the
+    // break-even curve through the heatmap.
+    ctx.strokeStyle = theme.contour;
+    ctx.lineWidth = 3;
+    // Horizontal neighbours (sign flip across columns)
+    for (let i = 0; i < nRows; i++) {
+        for (let j = 0; j < nCols - 1; j++) {
+            const a = matrix[i][j], b = matrix[i][j + 1];
+            if ((a < 0 && b >= 0) || (a >= 0 && b < 0)) {
+                const x = mL + (j + 1) * cw;
+                const y = mT + (nRows - 1 - i) * ch;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + ch);
+                ctx.stroke();
+            }
+        }
+    }
+    // Vertical neighbours (sign flip across rows)
+    for (let j = 0; j < nCols; j++) {
+        for (let i = 0; i < nRows - 1; i++) {
+            const a = matrix[i][j], b = matrix[i + 1][j];
+            if ((a < 0 && b >= 0) || (a >= 0 && b < 0)) {
+                const x = mL + j * cw;
+                // Boundary between row i and row i+1 is between their on-screen positions.
+                // Row i sits at y = mT + (nRows-1-i)*ch
+                // Row i+1 sits at y = mT + (nRows-1-(i+1))*ch = that same y minus ch
+                const y = mT + (nRows - 1 - i) * ch;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + cw, y);
+                ctx.stroke();
+            }
+        }
+    }
+
+    // ── Axes ──
+    ctx.strokeStyle = theme.dim;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(mL, mT);
+    ctx.lineTo(mL, mT + plotH);
+    ctx.lineTo(mL + plotW, mT + plotH);
+    ctx.stroke();
+
+    // X-axis labels (rotated 45° so they don't overlap)
+    ctx.fillStyle = theme.muted;
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    for (let j = 0; j < nCols; j++) {
+        const x = mL + j * cw + cw / 2;
+        ctx.save();
+        ctx.translate(x, mT + plotH + 20);
+        ctx.rotate(-Math.PI / 4);
+        ctx.fillText(spotLabels[j], 0, 0);
+        ctx.restore();
+    }
+    ctx.font = 'bold 13px Arial';
+    ctx.fillStyle = theme.text;
+    ctx.fillText('Spot TCE ($/day)', mL + plotW / 2, canvasHeight - 15);
+
+    // Y-axis labels
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.font = '11px Arial';
+    ctx.fillStyle = theme.muted;
+    for (let i = 0; i < nRows; i++) {
+        ctx.fillText(tcLabels[i], mL - 10, mT + (nRows - 1 - i) * ch + ch / 2);
+    }
+    // Y-axis title (rotated 90° so it reads bottom-to-top).
+    ctx.save();
+    ctx.translate(18, mT + plotH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = theme.text;
+    ctx.fillText('TC Rate ($/day)', 0, 0);
+    ctx.restore();
+
+    // Colour bar legend on the right.
+    drawColorBar(ctx, mL + plotW + 30, mT, 28, plotH, absMax, theme);
+}
+
+/* Vertical strip showing the red→yellow→green gradient with min/0/max
+   labels, so the reader can map cell colour to dollar value. */
+function drawColorBar(ctx, x, y, w, h, absMax, theme) {
+    for (let i = 0; i < h; i++) {
+        // Top of bar = +absMax (deep green), bottom = -absMax (deep red).
+        const val = absMax - (2 * absMax) * (i / h);
+        ctx.fillStyle = getColorForDelta(val, absMax);
+        ctx.fillRect(x, y + i, w, 1);
+    }
+    ctx.strokeStyle = theme.border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = theme.muted;
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(fmtSigned(absMax), x + w + 5, y);
+    ctx.fillText('$0',                 x + w + 5, y + h / 2);
+    ctx.fillText(fmtSigned(-absMax), x + w + 5, y + h);
+
+    ctx.save();
+    ctx.translate(x + w + 60, y + h / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = theme.text;
+    ctx.fillText('Delta ($/day)', 0, 0);
+    ctx.restore();
+}
+
+/* Live (on-screen) renderer — uses Tokyo Night palette. */
+function drawHeatmap(matrix, title) {
+    const canvas = document.getElementById('heatmapCanvas');
+    canvas.width = 1000;
+    canvas.height = 700;
+    renderHeatmap(canvas.getContext('2d'), 1000, 700, matrix, TN, title);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   HOVER TOOLTIP
+   When the mouse moves over the canvas, work out which cell it's over
+   and pop up a small box showing the underlying numbers.
+   ────────────────────────────────────────────────────────────────────── */
+function setupHoverEffect() {
+    const canvas = document.getElementById('heatmapCanvas');
+    const tooltip = document.getElementById('tooltip');
+
+    canvas.addEventListener('mousemove', function (e) {
+        if (!deltaMatrix) return;          // nothing to show before first calculate
+
+        // Convert mouse position from screen pixels to canvas pixels.
+        // (The canvas is 1000x700 internally but might display smaller.)
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const cx = (e.clientX - rect.left) * scaleX;
+        const cy = (e.clientY - rect.top) * scaleY;
+
+        // Same margin/cell math as the renderer.
+        const mL = 100, mR = 170, mT = 60, mB = 110;
+        const plotW = canvas.width - mL - mR;
+        const plotH = canvas.height - mT - mB;
+
+        if (cx >= mL && cx <= mL + plotW && cy >= mT && cy <= mT + plotH) {
+            const col = Math.floor((cx - mL) / (plotW / spotLabels.length));
+            const row = tcLabels.length - 1 - Math.floor((cy - mT) / (plotH / tcLabels.length));
+            if (row >= 0 && row < deltaMatrix.length &&
+                col >= 0 && col < deltaMatrix[0].length) {
+                const delta = deltaMatrix[row][col];
+                const annual = delta * 365;
+                tooltip.innerHTML =
+                    `<strong>Spot TCE:</strong> ${spotLabels[col]}/day<br>` +
+                    `<strong>TC Rate:</strong>  ${tcLabels[row]}/day<br>` +
+                    `<strong>Delta:</strong>    ${fmtSigned(delta)}/day<br>` +
+                    `<strong>Annual:</strong>   ${fmtSigned(annual)}`;
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.clientX + 14) + 'px';
+                tooltip.style.top  = (e.clientY + 14) + 'px';
+                return;
+            }
+        }
+        tooltip.style.display = 'none';
+    });
+    canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   MAIN CALCULATE — wired to the green button.
+   1. Read inputs   2. Validate   3. Build grid   4. Update cards   5. Draw heatmap
+   ────────────────────────────────────────────────────────────────────── */
+function calculateDelta() {
+    const inputs = readInputs();
+    const err = validateInputs(inputs);
+    if (err) { showError(err); return; }
+    clearError();
+
+    currentInputs = inputs;
+    updateBreakevenDisplay();
+
+    // ── Base-case headline numbers (the four cards) ──
+    const breakeven   = inputs.opex + inputs.capex;
+    const util        = inputs.utilisation / 100;
+    const spotMargin  = inputs.spotBase * util - breakeven;
+    const tcMargin    = inputs.tcBase - breakeven;
+    const baseDelta   = spotMargin - tcMargin;            // = spot*util − tc (breakeven cancels)
+    const annualDelta = baseDelta * 365;
+
+    // Helper to set a card's text and colour class.
+    function setCard(id, value, baseClass, signed = true) {
+        const el = document.getElementById(id);
+        el.textContent = signed ? fmtSigned(value) : fmtMoney(value);
+        // Wipe all colour classes, then add the right one.
+        el.classList.remove('positive', 'negative', 'gold', 'purple');
+        if (baseClass === 'auto') {
+            el.classList.add(value >= 0 ? 'positive' : 'negative');
+        } else if (baseClass) {
+            el.classList.add(baseClass);
+        }
+    }
+    setCard('spotMargin',  spotMargin,  null,     true);   // default blue, signed
+    setCard('tcMargin',    tcMargin,    'gold',   true);
+    setCard('baseDelta',   baseDelta,   'auto',   true);   // green if +ve, red if -ve
+    setCard('annualDelta', annualDelta, 'purple', true);
+
+    // ── Heatmap grid ──
+    deltaMatrix = buildDeltaMatrix(inputs);
+    document.getElementById('chartTitleDisplay').textContent = inputs.chartTitle;
+    drawHeatmap(deltaMatrix, inputs.chartTitle);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   PNG EXPORT — render to a hidden canvas with the light theme,
+   then trigger a download.
+   ────────────────────────────────────────────────────────────────────── */
+function downloadPNG() {
+    if (!deltaMatrix) { showError('Run calculate first.'); return; }
+
+    // Make a fresh canvas in memory (not in the page) and render onto it.
+    const canvas = document.createElement('canvas');
+    canvas.width = 1400;
+    canvas.height = 900;
+    const ctx = canvas.getContext('2d');
+    renderHeatmap(ctx, 1400, 900, deltaMatrix, EXPORT_THEME, currentInputs.chartTitle);
+
+    // Footer credit line.
+    ctx.fillStyle = '#666666';
+    ctx.font = 'italic 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Gibson Shipbrokers — Created by Sriniwas Ghate, S&P Department',
+                 canvas.width / 2, canvas.height - 12);
+
+    // Convert to a data URL and trigger a click on a temporary link.
+    const link = document.createElement('a');
+    link.download = `Gibson_Spot_vs_TC_Delta_${currentInputs.vesselType}_${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   PDF EXPORT — same idea, but wrap the image in a PDF document with
+   a written summary at the top.
+   ────────────────────────────────────────────────────────────────────── */
+function downloadPDF() {
+    if (!deltaMatrix) { showError('Run calculate first.'); return; }
+    // jsPDF exposes itself as window.jspdf when loaded via the UMD bundle.
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('landscape', 'mm', 'a4');
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+
+    // Title block
+    pdf.setFontSize(16);
+    pdf.setTextColor(30, 30, 50);
+    pdf.text('Gibson Shipbrokers — Spot vs TC Delta Calculator V1', pageW / 2, 14, { align: 'center' });
+    pdf.setFontSize(11);
+    pdf.setTextColor(80, 80, 100);
+    pdf.text(currentInputs.chartTitle, pageW / 2, 21, { align: 'center' });
+
+    // Inputs / results summary on the left side.
+    const i = currentInputs;
+    const breakeven = i.opex + i.capex;
+    const util = i.utilisation / 100;
+    const spotMargin  = i.spotBase * util - breakeven;
+    const tcMargin    = i.tcBase - breakeven;
+    const baseDelta   = spotMargin - tcMargin;
+    const annualDelta = baseDelta * 365;
+
+    pdf.setFontSize(9);
+    pdf.setTextColor(40, 40, 60);
+    let y = 30;
+    const line = (label, val) => {
+        pdf.setFont(undefined, 'bold');
+        pdf.text(label, 10, y);
+        pdf.setFont(undefined, 'normal');
+        pdf.text(val, 60, y);
+        y += 5;
+    };
+    line('Vessel Type:',     i.vesselType);
+    line('Utilisation:',     i.utilisation.toFixed(0) + '%');
+    line('OpEx ($/day):',    fmtMoney(i.opex));
+    line('CapEx ($/day):',   fmtMoney(i.capex));
+    line('Breakeven:',       fmtMoney(breakeven) + '/day');
+    y += 2;
+    line('Spot TCE Base:',   fmtMoney(i.spotBase) + '/day');
+    line('Spot TCE Range:',  fmtMoney(i.spotMin) + ' – ' + fmtMoney(i.spotMax));
+    line('TC Rate Base:',    fmtMoney(i.tcBase) + '/day');
+    line('TC Rate Range:',   fmtMoney(i.tcMin) + ' – ' + fmtMoney(i.tcMax));
+    y += 3;
+    pdf.setFont(undefined, 'bold');
+    pdf.setFontSize(10);
+    pdf.text('— Base-case results —', 10, y); y += 6;
+    pdf.setFontSize(9);
+    line('Spot Margin:',     fmtSigned(spotMargin) + '/day');
+    line('TC Margin:',       fmtSigned(tcMargin) + '/day');
+    line('Base Delta:',      fmtSigned(baseDelta) + '/day');
+    line('Annual Delta:',    fmtSigned(annualDelta));
+
+    // Render heatmap to canvas in light theme, then drop it into the PDF.
+    const canvas = document.createElement('canvas');
+    canvas.width = 1400; canvas.height = 900;
+    renderHeatmap(canvas.getContext('2d'), 1400, 900, deltaMatrix, EXPORT_THEME, i.chartTitle);
+    const imgData = canvas.toDataURL('image/png');
+    // Scale image to fill the right ~⅔ of the page.
+    const imgW = pageW * 0.62;
+    const imgH = imgW * (900 / 1400);
+    pdf.addImage(imgData, 'PNG', pageW - imgW - 8, 28, imgW, imgH);
+
+    // Footer
+    pdf.setFontSize(8);
+    pdf.setTextColor(120, 120, 140);
+    pdf.text('Gibson Shipbrokers — Created by Sriniwas Ghate, S&P Department',
+             pageW / 2, pageH - 6, { align: 'center' });
+
+    pdf.save(`Gibson_Spot_vs_TC_Delta_${i.vesselType}_${Date.now()}.pdf`);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   SHARE LINK — encode every input into the URL so the recipient opens
+   the calculator with the same scenario.
+   ────────────────────────────────────────────────────────────────────── */
+function shareLink() {
+    const inputs = readInputs();
+    // URLSearchParams builds a "key=val&key=val&…" string with proper escaping.
+    const params = new URLSearchParams();
+    for (const key in inputs) {
+        params.set(key, inputs[key]);
+    }
+    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+
+    // Modern browsers expose navigator.clipboard. We fall back to a
+    // hidden textarea + execCommand for older ones.
+    const showToast = () => {
+        const toast = document.getElementById('shareToast');
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 1800);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(url).then(showToast);
+    } else {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); showToast(); } catch (_) {}
+        document.body.removeChild(ta);
+    }
+}
+
+/* Read URL params on page load and pre-fill the form if present. */
+function loadFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.toString()) return;
+    const fields = ['chartTitle','vesselType','utilisation','opex','capex',
+                    'spotBase','spotMin','spotMax','tcBase','tcMin','tcMax'];
+    fields.forEach(f => {
+        if (params.has(f)) {
+            const el = document.getElementById(f);
+            if (el) el.value = params.get(f);
+        }
+    });
+}
+
+/* ── Modal open/close (V3 pattern, kept for symmetry) ── */
+function openChangelog()  { document.getElementById('changelogOverlay').classList.add('open'); }
+function closeChangelog() { document.getElementById('changelogOverlay').classList.remove('open'); }
+function closeChangelogOutside(e) {
+    // Close only if the click was on the dim backdrop, not on the modal content.
+    if (e.target.id === 'changelogOverlay') closeChangelog();
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   STARTUP — runs once when the page is loaded.
+   ────────────────────────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', () => {
+    // Live-update the breakeven display whenever opex or capex changes.
+    document.getElementById('opex').addEventListener('input', updateBreakevenDisplay);
+    document.getElementById('capex').addEventListener('input', updateBreakevenDisplay);
+
+    // Pre-fill from URL if a share link was used.
+    loadFromURL();
+
+    // Wire up tooltip and run the first calculation so the user sees
+    // a populated chart immediately, not an empty canvas.
+    setupHoverEffect();
+    updateBreakevenDisplay();
+    calculateDelta();
+});
+</script>
+</body>
+</html>
