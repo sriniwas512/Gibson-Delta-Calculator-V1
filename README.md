@@ -1,26 +1,27 @@
-# Gibson Spot vs TC Delta Calculator V1 ⚓
+# Gibson Spot vs TC Delta Calculator V2 ⚓
 
-A high-performance, interactive analytical tool for maritime professionals to compare daily margins between Spot Trading and Time Charter (TC) contracts.
+A high-performance, interactive analytical tool for maritime professionals to compare the financial viability of Spot Trading vs. Time Charter (TC) contracts.
 
 ![Gibson Branding](https://img.shields.io/badge/Branding-Gibson%20Shipbrokers-blue)
 ![Tech Stack](https://img.shields.io/badge/Tech-Vanilla%20JS%20|%20CSS3%20|%20HTML5-orange)
-![Version](https://img.shields.io/badge/Version-1.0.0-green)
+![Version](https://img.shields.io/badge/Version-2.0.0-green)
 
 ## 🚢 Overview
 
-The **Gibson Spot vs TC Delta Calculator** is designed to provide shipowners, brokers, and analysts with a visual representation of profitability deltas across different market scenarios. By utilizing a 10x10 heatmap, the tool identifies the precise market conditions where Spot TCE outperforms Time Charter rates or vice versa.
+The **Gibson Spot vs TC Delta Calculator V2** heavily upgrades the calculation depth from V1. It evolves the tool from a basic margin subtractor into a comprehensive project evaluation suite. It factors in true daily cash breakevens (via dynamic debt amortization), distinct addressing brokerage structures, and multi-year discounted Net Present Value (NPV).
+
+### What's New in V2?
+- **Financing Module**: Complete calculation of daily Principal & Interest (P&I) based on Vessel Purchase Price, Equity %, Interest Rate, and Loan Term. Replaces the generic CapEx input with true Cash Break-even.
+- **Brokerage Commissions**: Spot market and TC market fixtures utilize drastically different commission rates. These are now native inputs affecting the bottom-line delta.
+- **NPV Delta Calculation**: Calculates the Discounted Value Creation of Spot vs TC over a multi-year Charter term using WACC (Weighted Average Cost of Capital).
+- **Max Idle Days**: Automatically calculates how many days a year the vessel can afford to ballast or sit idle on the spot market before it under-performs the guaranteed TC rate.
 
 ### Key Features
 
-- **Interactive Heatmap**: A dynamic visual grid comparing Spot TCE vs. TC Rates.
+- **Interactive Heatmap**: A dynamic 10x10 visual grid showing the NPV Delta across a wide matrix of Spot Rates and TC Rates.
 - **Zero-Delta Contour**: A bold line tracing the break-even curve through the heatmap for instant visual analysis.
-- **Vessel Flexibility**: Pre-configured for Dry Bulk (Handy to Newcastlemax) and Tankers (MR to VLCC).
-- **Comprehensive Margin Analysis**:
-    - **Spot Margin**: `(Spot TCE × Utilisation) − Breakeven`
-    - **TC Margin**: `TC Rate − Breakeven`
-    - **Delta**: `Spot Margin − TC Margin`
 - **Professional Exports**:
-    - **PDF Report**: Detailed summary including inputs, base-case results, and the heatmap.
+    - **PDF Report**: Detailed summary including inputs, assumptions, base-case results, and the heatmap. Built natively inside the browser via `jsPDF`.
     - **PNG Image**: High-resolution chart export with Gibson branding.
 - **Scenario Sharing**: Generate specialized links to share exact calculation scenarios with colleagues.
 
@@ -33,8 +34,8 @@ The **Gibson Spot vs TC Delta Calculator** is designed to provide shipowners, br
 ## 🚀 Getting Started
 
 1.  **Open the App**: Simply open `index.html` in any modern web browser.
-2.  **Input Data**: Enter your Vessel Type, OpEx, CapEx, and market rate ranges.
-3.  **Calculate**: Hit "Calculate Delta" to generate the heatmap and summary cards.
+2.  **Input Data**: Enter your Vessel specs, Financing numbers, OPEX, Commissions, Rates, and Charter Terms.
+3.  **Calculate**: Hit "Calculate Analysis" to generate the heatmap and summary cards.
 4.  **Export**: Download a PDF report or PNG chart for presentations or record-keeping.
 
 ## 📝 Author
