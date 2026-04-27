@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gibson Spot vs TC Delta Calculator V2</title>
+<title>Gibson Spot vs TC Delta Calculator V1</title>
 
 <!--
     The little anchor icon that shows up in the browser tab.
@@ -388,7 +388,7 @@ canvas {
 <div class="container">
     <div class="header">
         <div class="gibson-branding-top">GIBSON SHIPBROKERS</div>
-        <h1>⚓ Gibson Spot vs TC Delta Calculator V2</h1>
+        <h1>⚓ Gibson Spot vs TC Delta Calculator V1</h1>
         <p>Advanced Net Present Value & Break-Even Analysis over Charter Periods</p>
         <div class="creator-credit">Created by Sriniwas Ghate, S&amp;P Department</div>
         <button class="whats-new-btn" onclick="openChangelog()">What's new? <span class="whats-new-badge">1</span></button>
@@ -398,7 +398,7 @@ canvas {
     <div class="modal-overlay" id="changelogOverlay" onclick="closeChangelogOutside(event)">
         <div class="modal" id="changelogModal">
             <button class="modal-close" onclick="closeChangelog()">&times;</button>
-            <h2>What's New in V2</h2>
+            <h2>What's New</h2>
             <p class="modal-subtitle">Feature upgrades</p>
             <ul>
                 <li style="color:#a9b1d6; margin-bottom:10px;"><strong>Financing Module:</strong> Removed generic "CapEx" field. It now accurately calculates Daily Debt Service based on vessel price, equity, and loan dynamics.</li>
@@ -930,7 +930,7 @@ function downloadPNG() {
     ctx.fillText('Gibson Shipbrokers — Created by Sriniwas Ghate, S&P Department', canvas.width / 2, canvas.height - 12);
     
     const link = document.createElement('a');
-    link.download = `Gibson_V2_Delta_${Date.now()}.png`;
+    link.download = `Gibson_V1_Delta_${Date.now()}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
 }
@@ -942,7 +942,7 @@ function downloadPDF() {
     const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
 
     pdf.setFontSize(16); pdf.setTextColor(30, 30, 50);
-    pdf.text('Gibson Shipbrokers — Delta Calculator V2', pageW / 2, 14, { align: 'center' });
+    pdf.text('Gibson Shipbrokers — Delta Calculator V1', pageW / 2, 14, { align: 'center' });
     pdf.setFontSize(11); pdf.setTextColor(80, 80, 100);
     pdf.text(currentInputs.chartTitle, pageW / 2, 21, { align: 'center' });
 
@@ -974,7 +974,7 @@ function downloadPDF() {
     const imgW = pageW * 0.65; const imgH = imgW * (900 / 1400);
     pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', pageW - imgW - 8, 28, imgW, imgH);
 
-    pdf.save(`Gibson_V2_Delta_${Date.now()}.pdf`);
+    pdf.save(`Gibson_V1_Delta_${Date.now()}.pdf`);
 }
 
 function shareLink() {

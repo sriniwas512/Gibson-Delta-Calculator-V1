@@ -1,16 +1,16 @@
-# Gibson Spot vs TC Delta Calculator V2 ⚓
+# Gibson Spot vs TC Delta Calculator V1 ⚓
 
 A high-performance, interactive analytical tool for maritime professionals to compare the financial viability of Spot Trading vs. Time Charter (TC) contracts.
 
 ![Gibson Branding](https://img.shields.io/badge/Branding-Gibson%20Shipbrokers-blue)
 ![Tech Stack](https://img.shields.io/badge/Tech-Vanilla%20JS%20|%20CSS3%20|%20HTML5-orange)
-![Version](https://img.shields.io/badge/Version-2.0.0-green)
+![Version](https://img.shields.io/badge/Version-1.0.0-green)
 
 ## 🚢 Overview
 
-The **Gibson Spot vs TC Delta Calculator V2** heavily upgrades the calculation depth from V1. It evolves the tool from a basic margin subtractor into a comprehensive project evaluation suite. It factors in true daily cash breakevens (via dynamic debt amortization), distinct addressing brokerage structures, and multi-year discounted Net Present Value (NPV).
+The **Gibson Spot vs TC Delta Calculator V1** heavily upgrades the calculation depth from its initial prototype. It evolves the tool from a basic margin subtractor into a comprehensive project evaluation suite. It factors in true daily cash breakevens (via dynamic debt amortization), distinct addressing brokerage structures, and multi-year discounted Net Present Value (NPV).
 
-### What's New in V2?
+### What's New?
 - **Financing Module**: Complete calculation of daily Principal & Interest (P&I) based on Vessel Purchase Price, Equity %, Interest Rate, and Loan Term. Replaces the generic CapEx input with true Cash Break-even.
 - **Brokerage Commissions**: Spot market and TC market fixtures utilize drastically different commission rates. These are now native inputs affecting the bottom-line delta.
 - **NPV Delta Calculation**: Calculates the Discounted Value Creation of Spot vs TC over a multi-year Charter term using WACC (Weighted Average Cost of Capital).
