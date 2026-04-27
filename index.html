@@ -234,7 +234,7 @@ body {
     justify-content: center;
 }
 .result-card h4 { color: #565f89; font-size: 0.9em; margin-bottom: 8px; }
-.result-card .value { font-size: 1.6em; font-weight: 700; color: #7aa2f7; }
+.result-card .value { font-size: 1.5em; font-weight: 700; color: #7aa2f7; }
 .result-card .value.negative { color: #f7768e; }
 .result-card .value.positive { color: #9ece6a; }
 .result-card .value.gold     { color: #e0af68; }
@@ -389,7 +389,7 @@ canvas {
     <div class="header">
         <div class="gibson-branding-top">GIBSON SHIPBROKERS</div>
         <h1>⚓ Gibson Spot vs TC Delta Calculator V1</h1>
-        <p>Advanced Net Present Value & Break-Even Analysis over Charter Periods</p>
+        <p>Advanced Net Present Value & Forward Curve Breakeven Analysis</p>
         <div class="creator-credit">Created by Sriniwas Ghate, S&amp;P Department</div>
         <button class="whats-new-btn" onclick="openChangelog()">What's new? <span class="whats-new-badge">1</span></button>
     </div>
@@ -401,10 +401,10 @@ canvas {
             <h2>What's New</h2>
             <p class="modal-subtitle">Feature upgrades</p>
             <ul>
-                <li style="color:#a9b1d6; margin-bottom:10px;"><strong>Financing Module:</strong> Removed generic "CapEx" field. It now accurately calculates Daily Debt Service based on vessel price, equity, and loan dynamics.</li>
+                <li style="color:#a9b1d6; margin-bottom:10px;"><strong>Forward Curve Integration:</strong> Enter the FFA curve for Years 1, 2, and 3+ to accurately model spot revenue fluctuations over multi-year tenors.</li>
+                <li style="color:#a9b1d6; margin-bottom:10px;"><strong>Premium/Discount Tracking:</strong> The heatmap now tracks the required <em>alpha</em> or <em>premium</em> your spot trading must achieve over the FFA curve to beat the TC rate.</li>
+                <li style="color:#a9b1d6; margin-bottom:10px;"><strong>Financing Module:</strong> Accurately calculates Daily Debt Service based on vessel price, equity, and loan dynamics instead of relying on a static CapEx assumption.</li>
                 <li style="color:#a9b1d6; margin-bottom:10px;"><strong>Commissions:</strong> Added inputs for broker address & brokerage commissions on Spot vs TC.</li>
-                <li style="color:#a9b1d6; margin-bottom:10px;"><strong>Discounted NPV Delta:</strong> The heatmap now displays the Net Present Value (NPV) of the margin differences over the life of the TC, discounted at your chosen WACC.</li>
-                <li style="color:#a9b1d6;"><strong>Implied Max Wait Days:</strong> Tells you exactly how many days the vessel can sit idle/ballast on the spot market per year before under-performing the TC rate.</li>
             </ul>
         </div>
     </div>
@@ -414,30 +414,16 @@ canvas {
         <!-- ====== LEFT: INPUTS PANEL ====== -->
         <div class="inputs-panel">
             
-            <!-- Chart Settings & Vessel -->
+            <!-- Chart Settings -->
             <div class="input-group">
                 <h3>📊 Chart Settings</h3>
                 <div class="input-row">
                     <label for="chartTitle">Chart Title</label>
-                    <input type="text" id="chartTitle" value="Kamsarmax — Spot vs TC Deal Analysis" />
+                    <input type="text" id="chartTitle" value="Spot vs TC Deal Analysis (FFA Baseline)" />
                 </div>
-                <div class="input-row inline-row">
-                    <div>
-                        <label for="vesselType">Vessel Type</label>
-                        <select id="vesselType">
-                            <option value="Kamsarmax" selected>Kamsarmax</option>
-                            <option value="Capesize">Capesize</option>
-                            <option value="Panamax">Panamax</option>
-                            <option value="Supramax">Supramax</option>
-                            <option value="MR">MR</option>
-                            <option value="LR2">LR2</option>
-                            <option value="VLCC">VLCC</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="utilisation">Spot Utilisation %</label>
-                        <input type="number" id="utilisation" value="92" min="0" max="100" />
-                    </div>
+                <div class="input-row">
+                    <label for="utilisation">Spot Utilisation %</label>
+                    <input type="number" id="utilisation" value="92" min="0" max="100" />
                 </div>
             </div>
 
@@ -496,37 +482,48 @@ canvas {
                 </div>
             </div>
 
-            <!-- Rates -->
+            <!-- Rates & Curves -->
             <div class="input-group">
-                <h3>💵 Spot TCE & TC Rate Ranges</h3>
+                <h3>💵 Spot Forward Curve & TC Rate</h3>
                 <div class="input-row inline-row">
                     <div>
-                        <label for="spotBase">Base Spot TCE ($)</label>
-                        <input type="number" id="spotBase" value="18000" step="500" />
+                        <label for="ffaY1">FFA Year 1 ($/day)</label>
+                        <input type="number" id="ffaY1" value="18000" step="250" />
+                    </div>
+                    <div>
+                        <label for="ffaY2">FFA Year 2 ($/day)</label>
+                        <input type="number" id="ffaY2" value="16500" step="250" />
+                    </div>
+                </div>
+                <div class="input-row inline-row">
+                    <div>
+                        <label for="ffaY3">FFA Year 3+ ($/day)</label>
+                        <input type="number" id="ffaY3" value="15000" step="250" />
                     </div>
                     <div>
                         <label for="tcBase">Base TC Rate ($)</label>
-                        <input type="number" id="tcBase" value="15500" step="500" />
+                        <input type="number" id="tcBase" value="15500" step="250" />
+                    </div>
+                </div>
+                <hr style="border-top: 1px dashed #292e42; border-bottom:none; margin: 15px 0;">
+                <div class="input-row inline-row">
+                    <div>
+                        <label for="tcMin">Chart TC Min ($)</label>
+                        <input type="number" id="tcMin" value="13000" step="500" />
+                    </div>
+                    <div>
+                        <label for="tcMax">Chart TC Max ($)</label>
+                        <input type="number" id="tcMax" value="18000" step="500" />
                     </div>
                 </div>
                 <div class="input-row inline-row">
                     <div>
-                        <label for="spotMin">Spot Min ($)</label>
-                        <input type="number" id="spotMin" value="10000" step="500" />
+                        <label for="premiumMin">Spot Premium Min ($)</label>
+                        <input type="number" id="premiumMin" value="-3000" step="500" />
                     </div>
                     <div>
-                        <label for="tcMin">TC Min ($)</label>
-                        <input type="number" id="tcMin" value="10000" step="500" />
-                    </div>
-                </div>
-                <div class="input-row inline-row">
-                    <div>
-                        <label for="spotMax">Spot Max ($)</label>
-                        <input type="number" id="spotMax" value="30000" step="500" />
-                    </div>
-                    <div>
-                        <label for="tcMax">TC Max ($)</label>
-                        <input type="number" id="tcMax" value="22000" step="500" />
+                        <label for="premiumMax">Spot Premium Max ($)</label>
+                        <input type="number" id="premiumMax" value="5000" step="500" />
                     </div>
                 </div>
             </div>
@@ -537,14 +534,14 @@ canvas {
                 <div class="input-row inline-row">
                     <div>
                         <label for="charterDuration">TC Duration (Years)</label>
-                        <input type="number" id="charterDuration" value="3" min="1" max="15" />
+                        <input type="number" id="charterDuration" value="3" min="1" max="15" step="0.5" />
                     </div>
                     <div>
                         <label for="wacc">Discount Rate (WACC %)</label>
                         <input type="number" id="wacc" value="8" step="0.1" />
                     </div>
                 </div>
-                <small style="color:#565f89">Used to calculate Net Present Value (NPV) of the spread.</small>
+                <small style="color:#565f89">Used to calculate Net Present Value (NPV) of the spot vs TC spread.</small>
             </div>
 
             <!-- Buttons -->
@@ -562,9 +559,9 @@ canvas {
 
             <div class="results-summary" id="results">
                 <div class="result-card">
-                    <h4>Spot Base (Net Out)</h4>
+                    <h4>Spot Blended Avg (Net)</h4>
                     <div class="value" id="cardSpot">—</div>
-                    <div class="sublabel">TCE x Util x (1-Comm) - BE</div>
+                    <div class="sublabel">Avg FFA x Util x (1-Comm) - BE</div>
                 </div>
                 <div class="result-card">
                     <h4>TC Base (Net Out)</h4>
@@ -577,9 +574,9 @@ canvas {
                     <div class="sublabel">Spot vs TC over Charter Term</div>
                 </div>
                 <div class="result-card">
-                    <h4>Max Idle Days / Yr</h4>
-                    <div class="value cyan" id="cardIdle">—</div>
-                    <div class="sublabel">Spot leeway to equal TC</div>
+                    <h4>Required Spot Alpha</h4>
+                    <div class="value cyan" id="cardAlpha">—</div>
+                    <div class="sublabel">Premium over FFA to equal TC</div>
                 </div>
             </div>
 
@@ -606,14 +603,13 @@ const EXPORT_THEME = {
 };
 
 let npvMatrix = null;
-let deltaDailyMatrix = null;
-let idleDaysMatrix = null;
-let spotLabels = [], tcLabels = [];
-let spotValues = [], tcValues = [];
+let premiumLabels = [], tcLabels = [];
+let premiumValues = [], tcValues = [];
 let currentInputs = null;
 
 // ---------- HELPERS ----------
 const fmtMoney  = n => '$' + Math.round(n).toLocaleString('en-US');
+const fmtSigned = n => (n >= 0 ? '+' : '−') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
 const fmtSignedM = n => (n >= 0 ? '+' : '−') + '$' + Math.abs(n/1e6).toFixed(2) + 'M';
 
 function calculateLoanPayment(principal, annualRate, years) {
@@ -622,10 +618,31 @@ function calculateLoanPayment(principal, annualRate, years) {
     return principal * (rate * Math.pow(1 + rate, years)) / (Math.pow(1 + rate, years) - 1);
 }
 
-function calculateNPVAnnuity(annualCashflow, years, discountRatePct) {
-    const r = discountRatePct / 100;
-    if (r === 0) return annualCashflow * years;
-    return annualCashflow * (1 - Math.pow(1 + r, -years)) / r;
+function getFFAForYear(ins, t) {
+    if (t === 1) return ins.ffaY1;
+    if (t === 2) return ins.ffaY2;
+    return ins.ffaY3; 
+}
+
+function calculateNPVCashflows(ins, spotPremium, tcRate) {
+    let npvSpot = 0;
+    let npvTC = 0;
+    let r = ins.wacc / 100;
+    
+    const fullYears = Math.floor(ins.charterDuration);
+    const fraction = ins.charterDuration - fullYears;
+    let tcNetDaily = tcRate * (1 - ins.tcComm);
+
+    for (let t = 1; t <= Math.ceil(ins.charterDuration); t++) {
+        let ffa = getFFAForYear(ins, t);
+        let spotNetDaily = (ffa + spotPremium) * ins.utilisation * (1 - ins.spotComm);
+        let days = (t === Math.ceil(ins.charterDuration) && fraction > 0) ? fraction * 365 : 365;
+
+        let df = (r === 0) ? 1 : Math.pow(1 + r, t);
+        npvSpot += (spotNetDaily * days) / df;
+        npvTC += (tcNetDaily * days) / df;
+    }
+    return npvSpot - npvTC;
 }
 
 // ---------- UI SYNC ----------
@@ -657,7 +674,6 @@ function updateFinanceDisplay() {
 function readInputs() {
     return {
         chartTitle: document.getElementById('chartTitle').value,
-        vesselType: document.getElementById('vesselType').value,
         utilisation: parseFloat(document.getElementById('utilisation').value)/100,
         purchasePrice: parseFloat(document.getElementById('purchasePrice').value)*1e6,
         equityPct: parseFloat(document.getElementById('equityPct').value)/100,
@@ -666,10 +682,12 @@ function readInputs() {
         opex: parseFloat(document.getElementById('opex').value),
         spotComm: parseFloat(document.getElementById('spotComm').value)/100,
         tcComm: parseFloat(document.getElementById('tcComm').value)/100,
-        spotBase: parseFloat(document.getElementById('spotBase').value),
+        ffaY1: parseFloat(document.getElementById('ffaY1').value),
+        ffaY2: parseFloat(document.getElementById('ffaY2').value),
+        ffaY3: parseFloat(document.getElementById('ffaY3').value),
         tcBase: parseFloat(document.getElementById('tcBase').value),
-        spotMin: parseFloat(document.getElementById('spotMin').value),
-        spotMax: parseFloat(document.getElementById('spotMax').value),
+        premiumMin: parseFloat(document.getElementById('premiumMin').value),
+        premiumMax: parseFloat(document.getElementById('premiumMax').value),
         tcMin: parseFloat(document.getElementById('tcMin').value),
         tcMax: parseFloat(document.getElementById('tcMax').value),
         charterDuration: parseFloat(document.getElementById('charterDuration').value),
@@ -686,27 +704,41 @@ function calculateDelta() {
     const dailyPI = calculateLoanPayment(debt, ins.interestRate, ins.loanTerm) / 365;
     const breakeven = ins.opex + dailyPI;
 
-    // Base Case Cards
-    const spotNetDaily = ins.spotBase * ins.utilisation * (1 - ins.spotComm);
-    const tcNetDaily = ins.tcBase * (1 - ins.tcComm);
-    
-    const spotMargin = spotNetDaily - breakeven;
-    const tcMargin = tcNetDaily - breakeven;
-    const deltaDaily = spotNetDaily - tcNetDaily;
-    const annualDelta = deltaDaily * 365;
-    const npvVal = calculateNPVAnnuity(annualDelta, ins.charterDuration, ins.wacc);
-
-    // Max idle days
-    // Annual TC Revenue = tcNetDaily * 365
-    // Required Spot Days = Annual TC Revenue / (SpotBase * (1 - spotComm))
-    const spot100Net = ins.spotBase * (1 - ins.spotComm);
-    let idleDays = 'N/A';
-    if (spot100Net > 0) {
-        const requiredEarningDays = (tcNetDaily * 365) / spot100Net;
-        const maxIdle = 365 - requiredEarningDays;
-        idleDays = maxIdle < 0 ? 'Never matches' : Math.floor(maxIdle) + ' Days';
+    // 1. Blended Avg Spot (Net Out) OVER FFA CURVE
+    const fraction = ins.charterDuration - Math.floor(ins.charterDuration);
+    let totalFFA_Days = 0;
+    let totalDays = 0;
+    for (let t=1; t<=Math.ceil(ins.charterDuration); t++) {
+        let ffa = getFFAForYear(ins, t);
+        let d = (t === Math.ceil(ins.charterDuration) && fraction > 0) ? fraction * 365 : 365;
+        totalFFA_Days += ffa * d;
+        totalDays += d;
     }
+    const avgFFA = totalFFA_Days / totalDays;
+    const spotMargin = (avgFFA * ins.utilisation * (1 - ins.spotComm)) - breakeven;
+    
+    // 2. TC Net
+    const tcNetDaily = ins.tcBase * (1 - ins.tcComm);
+    const tcMargin = tcNetDaily - breakeven;
 
+    // 3. NPV Value Creation (at $0 Spot Premium)
+    const npvVal = calculateNPVCashflows(ins, 0, ins.tcBase);
+
+    // 4. Required Spot Alpha (Premium to reach TC NPV = 0)
+    let npvTC = 0, npvSpotFFA = 0, npvDays = 0;
+    let r = ins.wacc / 100;
+    for (let t=1; t<=Math.ceil(ins.charterDuration); t++) {
+        let ffa = getFFAForYear(ins, t);
+        let days = (t === Math.ceil(ins.charterDuration) && fraction > 0) ? fraction * 365 : 365;
+        let df = r===0 ? 1 : Math.pow(1+r, t);
+        npvTC += (tcNetDaily * days) / df;
+        npvSpotFFA += (ffa * ins.utilisation * (1 - ins.spotComm) * days) / df;
+        npvDays += days / df;
+    }
+    // NPV(TC) = NPV(SpotFFA) + reqPremium * Util * (1-Comm) * npvDays
+    const reqAlpha = (npvTC - npvSpotFFA) / (ins.utilisation * (1 - ins.spotComm) * npvDays);
+
+    // Update Cards
     const scard = document.getElementById('cardSpot');
     scard.textContent = fmtMoney(spotMargin);
     scard.className = 'value ' + (spotMargin >= 0 ? 'positive' : 'negative');
@@ -717,37 +749,26 @@ function calculateDelta() {
     ncard.textContent = fmtSignedM(npvVal);
     ncard.className = 'value ' + (npvVal >= 0 ? 'purple' : 'negative');
 
-    document.getElementById('cardIdle').textContent = idleDays;
+    const acard = document.getElementById('cardAlpha');
+    acard.textContent = fmtSigned(reqAlpha) + '/d';
+    acard.className = 'value ' + (reqAlpha <= 0 ? 'positive' : 'negative');
 
     // Heatmap matrices
     const N = 10;
-    spotValues = Array.from({length: N}, (_, i) => ins.spotMin + (ins.spotMax - ins.spotMin)*i/(N-1));
+    premiumValues = Array.from({length: N}, (_, i) => ins.premiumMin + (ins.premiumMax - ins.premiumMin)*i/(N-1));
     tcValues = Array.from({length: N}, (_, i) => ins.tcMin + (ins.tcMax - ins.tcMin)*i/(N-1));
-    spotLabels = spotValues.map(fmtMoney);
+    
+    premiumLabels = premiumValues.map(v => (v >= 0 ? '+' : '') + fmtMoney(v));
     tcLabels = tcValues.map(fmtMoney);
 
     npvMatrix = [];
-    deltaDailyMatrix = [];
-    idleDaysMatrix = [];
 
     for (let i = 0; i < N; i++) {
         const npvRow = [];
-        const dcRow = [];
-        const idRow = [];
         for (let j = 0; j < N; j++) {
-            const sn = spotValues[j] * ins.utilisation * (1 - ins.spotComm);
-            const tn = tcValues[i] * (1 - ins.tcComm);
-            const deltaD = sn - tn;
-            dcRow.push(deltaD);
-            npvRow.push(calculateNPVAnnuity(deltaD * 365, ins.charterDuration, ins.wacc));
-
-            const s100 = spotValues[j] * (1 - ins.spotComm);
-            const reqD = (tn * 365) / s100;
-            idRow.push(365 - reqD);
+            npvRow.push(calculateNPVCashflows(ins, premiumValues[j], tcValues[i]));
         }
         npvMatrix.push(npvRow);
-        deltaDailyMatrix.push(dcRow);
-        idleDaysMatrix.push(idRow);
     }
 
     document.getElementById('chartTitleDisplay').textContent = ins.chartTitle;
@@ -847,10 +868,10 @@ function renderHeatmap(ctx, canvasWidth, canvasHeight, matrix, theme, title) {
     for (let j = 0; j < N; j++) {
         const x = mL + j * cw + cw / 2;
         ctx.save(); ctx.translate(x, mT + plotH + 20); ctx.rotate(-Math.PI / 4);
-        ctx.fillText(spotLabels[j], 0, 0); ctx.restore();
+        ctx.fillText(premiumLabels[j], 0, 0); ctx.restore();
     }
     ctx.font = 'bold 13px Arial'; ctx.fillStyle = theme.text;
-    ctx.fillText('Spot TCE ($/day)', mL + plotW / 2, canvasHeight - 15);
+    ctx.fillText('Spot Premium (+/- to FFA Curve) $/day', mL + plotW / 2, canvasHeight - 15);
 
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.font = '11px Arial'; ctx.fillStyle = theme.muted;
     for (let i = 0; i < N; i++) ctx.fillText(tcLabels[i], mL - 10, mT + (N - 1 - i) * ch + ch / 2);
@@ -873,7 +894,7 @@ function renderHeatmap(ctx, canvasWidth, canvasHeight, matrix, theme, title) {
 
     ctx.save(); ctx.translate(cbX + 80, mT + plotH / 2); ctx.rotate(-Math.PI / 2);
     ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = theme.text;
-    ctx.fillText('NPV Delta ($)', 0, 0); ctx.restore();
+    ctx.fillText('NPV Value Creation ($)', 0, 0); ctx.restore();
 }
 
 function drawHeatmap(id, matrix, theme, title) {
@@ -898,15 +919,11 @@ function setupHoverTooltip() {
             const row = 9 - Math.floor((cy - mT) / (plotH / 10));
             if (row >= 0 && row < 10 && col >= 0 && col < 10) {
                 const npv = npvMatrix[row][col];
-                const dDelta = deltaDailyMatrix[row][col];
-                const idays = idleDaysMatrix[row][col];
 
                 tooltip.innerHTML = `
-                    <strong>Spot TCE:</strong> ${spotLabels[col]}<br>
+                    <strong>Spot vs FFA Premium:</strong> ${premiumLabels[col]}<br>
                     <strong>TC Rate:</strong> ${tcLabels[row]}<br><hr style="border:1px solid #292e42;margin:5px 0">
-                    <strong>Daily Spread:</strong> ${(dDelta>=0?'+':'−')}$${Math.abs(Math.round(dDelta))}/day<br>
-                    <strong>NPV Delta:</strong> ${fmtSignedM(npv)}<br>
-                    <strong>Max Idle Days:</strong> ${idays < 0 ? 'Never matches' : Math.floor(idays) + ' days/yr'}
+                    <strong>NPV Value Created/Lost:</strong> <span style="color:${npv>=0?'#bb9af7':'#f7768e'}">${fmtSignedM(npv)}</span>
                 `;
                 tooltip.style.display = 'block';
                 tooltip.style.left = (e.clientX + 14) + 'px';
@@ -953,7 +970,6 @@ function downloadPDF() {
         pdf.setFont(undefined, 'normal'); pdf.text(val, 60, y); y += 5;
     };
     const i = currentInputs;
-    ln('Vessel Type:', i.vesselType);
     ln('Spot Utilisation:', (i.utilisation*100).toFixed(0) + '%');
     y+=2;
     ln('Purchase Price:', '$' + (i.purchasePrice/1e6).toFixed(1) + 'M (' + (i.equityPct*100) + '% Equity)');
@@ -966,6 +982,8 @@ function downloadPDF() {
     y+=2;
     ln('Charter Term:', i.charterDuration + ' years (Discount: ' + i.wacc + '%)');
     ln('Commissions:', 'Spot ' + (i.spotComm*100) + '% | TC ' + (i.tcComm*100) + '%');
+    y+=2;
+    ln('FFA Curve Base:', `Y1: ${fmtMoney(i.ffaY1)} | Y2: ${fmtMoney(i.ffaY2)} | Y3+: ${fmtMoney(i.ffaY3)}`);
     
     // Canvas
     const canvas = document.createElement('canvas');
@@ -980,9 +998,10 @@ function downloadPDF() {
 function shareLink() {
     const params = new URLSearchParams();
     const map = {
-        chartTitle:'t', vesselType:'vt', utilisation:'ut', purchasePrice:'p',
+        chartTitle:'t', utilisation:'ut', purchasePrice:'p',
         equityPct:'e', interestRate:'ir', loanTerm:'lt', opex:'ox', spotComm:'sc', tcComm:'tcc',
-        spotBase:'sb', tcBase:'tb', spotMin:'sm', tcMin:'tm', spotMax:'sx', tcMax:'tx',
+        ffaY1:'fy1', ffaY2:'fy2', ffaY3:'fy3',
+        tcBase:'tb', premiumMin:'pmin', premiumMax:'pmax', tcMin:'tm', tcMax:'tx',
         charterDuration:'cd', wacc:'wc'
     };
     for(const k in map) params.set(map[k], document.getElementById(k).value);
@@ -995,9 +1014,10 @@ function shareLink() {
 function loadFromURL() {
     const params = new URLSearchParams(location.search);
     const map = {
-        chartTitle:'t', vesselType:'vt', utilisation:'ut', purchasePrice:'p',
+        chartTitle:'t', utilisation:'ut', purchasePrice:'p',
         equityPct:'e', interestRate:'ir', loanTerm:'lt', opex:'ox', spotComm:'sc', tcComm:'tcc',
-        spotBase:'sb', tcBase:'tb', spotMin:'sm', tcMin:'tm', spotMax:'sx', tcMax:'tx',
+        ffaY1:'fy1', ffaY2:'fy2', ffaY3:'fy3',
+        tcBase:'tb', premiumMin:'pmin', premiumMax:'pmax', tcMin:'tm', tcMax:'tx',
         charterDuration:'cd', wacc:'wc'
     };
     for(const k in map) {
