@@ -419,11 +419,46 @@ canvas {
                 <h3>📊 Chart Settings</h3>
                 <div class="input-row">
                     <label for="chartTitle">Chart Title</label>
-                    <input type="text" id="chartTitle" value="Spot vs TC Deal Analysis (FFA Baseline)" />
+                    <input type="text" id="chartTitle" value="Spot vs TC Decision Support (Operating Model)" />
+                </div>
+            </div>
+
+            <div class="input-group">
+                <h3>🚢 Spot Operating Profile</h3>
+                <div class="input-row inline-row">
+                    <div>
+                        <label for="ladenDays">Laden Days / Year</label>
+                        <input type="number" id="ladenDays" value="250" min="0" max="365" step="1" />
+                    </div>
+                    <div>
+                        <label for="ballastDays">Ballast / Reposition Days</label>
+                        <input type="number" id="ballastDays" value="70" min="0" max="365" step="1" />
+                    </div>
+                </div>
+                <div class="input-row inline-row">
+                    <div>
+                        <label for="idleDays">Idle / Waiting / Off-hire Days</label>
+                        <input type="number" id="idleDays" value="45" min="0" max="365" step="1" />
+                    </div>
+                    <div>
+                        <label for="spotDaysPerYear">Total Spot Days</label>
+                        <input type="text" id="spotDaysPerYear" value="—" readonly />
+                    </div>
+                </div>
+                <div class="input-row inline-row">
+                    <div>
+                        <label for="voyageCostPerLadenDay">Voyage Cost / Laden Day ($)</label>
+                        <input type="number" id="voyageCostPerLadenDay" value="2200" min="0" step="100" />
+                    </div>
+                    <div>
+                        <label for="ballastCostPerDay">Ballast Cost / Day ($)</label>
+                        <input type="number" id="ballastCostPerDay" value="3200" min="0" step="100" />
+                    </div>
                 </div>
                 <div class="input-row">
-                    <label for="utilisation">Spot Utilisation %</label>
-                    <input type="number" id="utilisation" value="92" min="0" max="100" />
+                    <label for="idleCostPerDay">Idle / Waiting Cost / Day ($)</label>
+                    <input type="number" id="idleCostPerDay" value="1500" min="0" step="100" />
+                    <small>Model how spot earnings are actually generated instead of compressing everything into a single utilisation percentage.</small>
                 </div>
             </div>
 
@@ -559,24 +594,24 @@ canvas {
 
             <div class="results-summary" id="results">
                 <div class="result-card">
-                    <h4>Spot Blended Avg (Net)</h4>
+                    <h4>Spot Annual Net Cashflow</h4>
                     <div class="value" id="cardSpot">—</div>
-                    <div class="sublabel">Avg FFA x Util x (1-Comm) - BE</div>
+                    <div class="sublabel">Net spot economics after commissions, variable costs, opex and debt</div>
                 </div>
                 <div class="result-card">
-                    <h4>TC Base (Net Out)</h4>
+                    <h4>TC Annual Net Cashflow</h4>
                     <div class="value gold" id="cardTC">—</div>
-                    <div class="sublabel">TC Rate x (1-Comm) - BE</div>
+                    <div class="sublabel">Net TC economics after commissions, opex and debt</div>
                 </div>
                 <div class="result-card">
-                    <h4>NPV Value Creation</h4>
+                    <h4>Relative NPV: Spot vs TC</h4>
                     <div class="value purple" id="cardNPV">—</div>
-                    <div class="sublabel">Spot vs TC over Charter Term</div>
+                    <div class="sublabel">Discounted difference over the selected charter tenor</div>
                 </div>
                 <div class="result-card">
-                    <h4>Required Spot Alpha</h4>
+                    <h4>Required Spot Premium vs FFA</h4>
                     <div class="value cyan" id="cardAlpha">—</div>
-                    <div class="sublabel">Premium over FFA to equal TC</div>
+                    <div class="sublabel">Extra earned per laden day needed for spot to match TC</div>
                 </div>
             </div>
 
@@ -624,25 +659,113 @@ function getFFAForYear(ins, t) {
     return ins.ffaY3; 
 }
 
-function calculateNPVCashflows(ins, spotPremium, tcRate) {
-    let npvSpot = 0;
-    let npvTC = 0;
-    let r = ins.wacc / 100;
-    
-    const fullYears = Math.floor(ins.charterDuration);
-    const fraction = ins.charterDuration - fullYears;
-    let tcNetDaily = tcRate * (1 - ins.tcComm);
+function getSpotTotalDays(ins) {
+    return ins.ladenDays + ins.ballastDays + ins.idleDays;
+}
 
-    for (let t = 1; t <= Math.ceil(ins.charterDuration); t++) {
-        let ffa = getFFAForYear(ins, t);
-        let spotNetDaily = (ffa + spotPremium) * ins.utilisation * (1 - ins.spotComm);
-        let days = (t === Math.ceil(ins.charterDuration) && fraction > 0) ? fraction * 365 : 365;
+function calculateFixedCostDaily(ins) {
+    const debt = ins.purchasePrice * (1 - ins.equityPct);
+    const dailyPI = calculateLoanPayment(debt, ins.interestRate, ins.loanTerm) / 365;
+    return {
+        debt,
+        dailyPI,
+        breakeven: ins.opex + dailyPI
+    };
+}
 
-        let df = (r === 0) ? 1 : Math.pow(1 + r, t);
-        npvSpot += (spotNetDaily * days) / df;
-        npvTC += (tcNetDaily * days) / df;
+function calculateSpotOperatingEconomics(ins, spotPremium, yearIndex) {
+    const ffa = getFFAForYear(ins, yearIndex);
+    const totalDays = getSpotTotalDays(ins);
+    const grossRevenue = (ffa + spotPremium) * ins.ladenDays;
+    const netRevenueAfterCommission = grossRevenue * (1 - ins.spotComm);
+    const variableCosts =
+        (ins.voyageCostPerLadenDay * ins.ladenDays) +
+        (ins.ballastCostPerDay * ins.ballastDays) +
+        (ins.idleCostPerDay * ins.idleDays);
+    const fixedCosts = calculateFixedCostDaily(ins).breakeven * totalDays;
+    const annualNetCashflow = netRevenueAfterCommission - variableCosts - fixedCosts;
+
+    return {
+        ffa,
+        totalDays,
+        grossRevenue,
+        netRevenueAfterCommission,
+        variableCosts,
+        fixedCosts,
+        annualNetCashflow,
+        netDailyAfterFixedCosts: totalDays === 0 ? 0 : annualNetCashflow / totalDays
+    };
+}
+
+function calculateTCEconomics(ins, tcRate) {
+    const totalDays = getSpotTotalDays(ins);
+    const grossRevenue = tcRate * totalDays;
+    const netRevenueAfterCommission = grossRevenue * (1 - ins.tcComm);
+    const fixedCosts = calculateFixedCostDaily(ins).breakeven * totalDays;
+    const annualNetCashflow = netRevenueAfterCommission - fixedCosts;
+
+    return {
+        totalDays,
+        grossRevenue,
+        netRevenueAfterCommission,
+        fixedCosts,
+        annualNetCashflow,
+        netDailyAfterFixedCosts: totalDays === 0 ? 0 : annualNetCashflow / totalDays
+    };
+}
+
+function calculateDecisionSnapshot(ins, tcRate, spotPremium) {
+    const spotBase = calculateSpotOperatingEconomics(ins, spotPremium, 1);
+    const tcBase = calculateTCEconomics(ins, tcRate);
+    const fraction = ins.charterDuration - Math.floor(ins.charterDuration);
+    const termYears = Math.ceil(ins.charterDuration);
+    const discountRate = ins.wacc / 100;
+    let relativeNpv = 0;
+    let spotStandaloneNpv = 0;
+    let tcStandaloneNpv = 0;
+    let discountedLadenDays = 0;
+
+    for (let year = 1; year <= termYears; year++) {
+        const daysFactor = (year === termYears && fraction > 0) ? fraction : 1;
+        const discountFactor = discountRate === 0 ? 1 : Math.pow(1 + discountRate, year);
+        const spot = calculateSpotOperatingEconomics(ins, spotPremium, year);
+        const tc = calculateTCEconomics(ins, tcRate);
+        const spotCashflow = spot.annualNetCashflow * daysFactor;
+        const tcCashflow = tc.annualNetCashflow * daysFactor;
+
+        relativeNpv += (spotCashflow - tcCashflow) / discountFactor;
+        spotStandaloneNpv += spotCashflow / discountFactor;
+        tcStandaloneNpv += tcCashflow / discountFactor;
+        discountedLadenDays += (ins.ladenDays * daysFactor) / discountFactor;
     }
-    return npvSpot - npvTC;
+
+    const requiredPremium =
+        discountedLadenDays === 0
+            ? 0
+            : (tcStandaloneNpv - spotStandaloneNpv) / ((1 - ins.spotComm) * discountedLadenDays);
+
+    return {
+        spotAnnualNetCashflow: spotBase.annualNetCashflow,
+        tcAnnualNetCashflow: tcBase.annualNetCashflow,
+        relativeNpv,
+        requiredPremium,
+        spotBase,
+        tcBase
+    };
+}
+
+function calculateNPVCashflows(ins, spotPremium, tcRate) {
+    return calculateDecisionSnapshot(ins, tcRate, spotPremium).relativeNpv;
+}
+
+function showError(message) {
+    const banner = document.getElementById('errorBanner');
+    banner.innerHTML = `<strong>Check inputs:</strong> ${message}`;
+    banner.style.display = 'block';
+}
+
+function clearError() {
+    document.getElementById('errorBanner').style.display = 'none';
 }
 
 // ---------- UI SYNC ----------
@@ -666,15 +789,37 @@ function updateFinanceDisplay() {
     document.getElementById('debtService').value = fmtMoney(dailyPI);
     document.getElementById('breakeven').value = fmtMoney(opex + dailyPI);
 }
+
+function updateOperatingDisplay() {
+    const ladenDays = parseFloat(document.getElementById('ladenDays').value);
+    const ballastDays = parseFloat(document.getElementById('ballastDays').value);
+    const idleDays = parseFloat(document.getElementById('idleDays').value);
+
+    if ([ladenDays, ballastDays, idleDays].some(v => Number.isNaN(v))) {
+        document.getElementById('spotDaysPerYear').value = '—';
+        return;
+    }
+
+    document.getElementById('spotDaysPerYear').value = String(ladenDays + ballastDays + idleDays);
+}
 ['purchasePrice','equityPct','interestRate','loanTerm','opex'].forEach(id => {
     document.getElementById(id).addEventListener('input', updateFinanceDisplay);
+});
+['ladenDays','ballastDays','idleDays'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateOperatingDisplay);
 });
 
 // ---------- CALCULATION ----------
 function readInputs() {
     return {
         chartTitle: document.getElementById('chartTitle').value,
-        utilisation: parseFloat(document.getElementById('utilisation').value)/100,
+        ladenDays: parseFloat(document.getElementById('ladenDays').value),
+        ballastDays: parseFloat(document.getElementById('ballastDays').value),
+        idleDays: parseFloat(document.getElementById('idleDays').value),
+        spotDaysPerYear: parseFloat(document.getElementById('spotDaysPerYear').value),
+        voyageCostPerLadenDay: parseFloat(document.getElementById('voyageCostPerLadenDay').value),
+        ballastCostPerDay: parseFloat(document.getElementById('ballastCostPerDay').value),
+        idleCostPerDay: parseFloat(document.getElementById('idleCostPerDay').value),
         purchasePrice: parseFloat(document.getElementById('purchasePrice').value)*1e6,
         equityPct: parseFloat(document.getElementById('equityPct').value)/100,
         interestRate: parseFloat(document.getElementById('interestRate').value),
@@ -696,62 +841,53 @@ function readInputs() {
 }
 
 function calculateDelta() {
-    document.getElementById('errorBanner').style.display = 'none';
+    clearError();
     const ins = readInputs();
     currentInputs = ins;
 
-    const debt = ins.purchasePrice * (1 - ins.equityPct);
-    const dailyPI = calculateLoanPayment(debt, ins.interestRate, ins.loanTerm) / 365;
-    const breakeven = ins.opex + dailyPI;
-
-    // 1. Blended Avg Spot (Net Out) OVER FFA CURVE
-    const fraction = ins.charterDuration - Math.floor(ins.charterDuration);
-    let totalFFA_Days = 0;
-    let totalDays = 0;
-    for (let t=1; t<=Math.ceil(ins.charterDuration); t++) {
-        let ffa = getFFAForYear(ins, t);
-        let d = (t === Math.ceil(ins.charterDuration) && fraction > 0) ? fraction * 365 : 365;
-        totalFFA_Days += ffa * d;
-        totalDays += d;
+    if (Object.values(ins).some(value => Number.isNaN(value) && typeof value === 'number')) {
+        showError('One or more fields are empty or invalid.');
+        return;
     }
-    const avgFFA = totalFFA_Days / totalDays;
-    const spotMargin = (avgFFA * ins.utilisation * (1 - ins.spotComm)) - breakeven;
-    
-    // 2. TC Net
-    const tcNetDaily = ins.tcBase * (1 - ins.tcComm);
-    const tcMargin = tcNetDaily - breakeven;
 
-    // 3. NPV Value Creation (at $0 Spot Premium)
-    const npvVal = calculateNPVCashflows(ins, 0, ins.tcBase);
-
-    // 4. Required Spot Alpha (Premium to reach TC NPV = 0)
-    let npvTC = 0, npvSpotFFA = 0, npvDays = 0;
-    let r = ins.wacc / 100;
-    for (let t=1; t<=Math.ceil(ins.charterDuration); t++) {
-        let ffa = getFFAForYear(ins, t);
-        let days = (t === Math.ceil(ins.charterDuration) && fraction > 0) ? fraction * 365 : 365;
-        let df = r===0 ? 1 : Math.pow(1+r, t);
-        npvTC += (tcNetDaily * days) / df;
-        npvSpotFFA += (ffa * ins.utilisation * (1 - ins.spotComm) * days) / df;
-        npvDays += days / df;
+    if (ins.ladenDays < 0 || ins.ballastDays < 0 || ins.idleDays < 0) {
+        showError('Operating day assumptions cannot be negative.');
+        return;
     }
-    // NPV(TC) = NPV(SpotFFA) + reqPremium * Util * (1-Comm) * npvDays
-    const reqAlpha = (npvTC - npvSpotFFA) / (ins.utilisation * (1 - ins.spotComm) * npvDays);
+
+    const totalDays = getSpotTotalDays(ins);
+    if (totalDays <= 0) {
+        showError('Enter a positive number of operating days.');
+        return;
+    }
+
+    if (ins.ladenDays === 0) {
+        showError('Laden days must be above zero to calculate required spot premium versus FFA.');
+        return;
+    }
+
+    if (Math.abs(totalDays - 365) > 5) {
+        showError(`Spot operating days currently total ${Math.round(totalDays)}. For an annual comparison, keep this close to 365.`);
+    }
+
+    const snapshot = calculateDecisionSnapshot(ins, ins.tcBase, 0);
 
     // Update Cards
     const scard = document.getElementById('cardSpot');
-    scard.textContent = fmtMoney(spotMargin);
-    scard.className = 'value ' + (spotMargin >= 0 ? 'positive' : 'negative');
+    scard.textContent = fmtSignedM(snapshot.spotAnnualNetCashflow);
+    scard.className = 'value ' + (snapshot.spotAnnualNetCashflow >= 0 ? 'positive' : 'negative');
     
-    document.getElementById('cardTC').textContent = fmtMoney(tcMargin);
+    const tcard = document.getElementById('cardTC');
+    tcard.textContent = fmtSignedM(snapshot.tcAnnualNetCashflow);
+    tcard.className = 'value ' + (snapshot.tcAnnualNetCashflow >= 0 ? 'gold' : 'negative');
     
     const ncard = document.getElementById('cardNPV');
-    ncard.textContent = fmtSignedM(npvVal);
-    ncard.className = 'value ' + (npvVal >= 0 ? 'purple' : 'negative');
+    ncard.textContent = fmtSignedM(snapshot.relativeNpv);
+    ncard.className = 'value ' + (snapshot.relativeNpv >= 0 ? 'purple' : 'negative');
 
     const acard = document.getElementById('cardAlpha');
-    acard.textContent = fmtSigned(reqAlpha) + '/d';
-    acard.className = 'value ' + (reqAlpha <= 0 ? 'positive' : 'negative');
+    acard.textContent = fmtSigned(snapshot.requiredPremium) + '/d';
+    acard.className = 'value ' + (snapshot.requiredPremium <= 0 ? 'positive' : 'negative');
 
     // Heatmap matrices
     const N = 10;
@@ -894,7 +1030,7 @@ function renderHeatmap(ctx, canvasWidth, canvasHeight, matrix, theme, title) {
 
     ctx.save(); ctx.translate(cbX + 80, mT + plotH / 2); ctx.rotate(-Math.PI / 2);
     ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = theme.text;
-    ctx.fillText('NPV Value Creation ($)', 0, 0); ctx.restore();
+    ctx.fillText('Relative NPV: Spot vs TC ($)', 0, 0); ctx.restore();
 }
 
 function drawHeatmap(id, matrix, theme, title) {
@@ -923,7 +1059,7 @@ function setupHoverTooltip() {
                 tooltip.innerHTML = `
                     <strong>Spot vs FFA Premium:</strong> ${premiumLabels[col]}<br>
                     <strong>TC Rate:</strong> ${tcLabels[row]}<br><hr style="border:1px solid #292e42;margin:5px 0">
-                    <strong>NPV Value Created/Lost:</strong> <span style="color:${npv>=0?'#bb9af7':'#f7768e'}">${fmtSignedM(npv)}</span>
+                    <strong>Relative NPV:</strong> <span style="color:${npv>=0?'#bb9af7':'#f7768e'}">${fmtSignedM(npv)}</span>
                 `;
                 tooltip.style.display = 'block';
                 tooltip.style.left = (e.clientX + 14) + 'px';
@@ -970,7 +1106,8 @@ function downloadPDF() {
         pdf.setFont(undefined, 'normal'); pdf.text(val, 60, y); y += 5;
     };
     const i = currentInputs;
-    ln('Spot Utilisation:', (i.utilisation*100).toFixed(0) + '%');
+    ln('Laden / Ballast / Idle:', `${i.ladenDays} / ${i.ballastDays} / ${i.idleDays} days`);
+    ln('Spot Variable Costs:', `Laden ${fmtMoney(i.voyageCostPerLadenDay)} | Ballast ${fmtMoney(i.ballastCostPerDay)} | Idle ${fmtMoney(i.idleCostPerDay)}`);
     y+=2;
     ln('Purchase Price:', '$' + (i.purchasePrice/1e6).toFixed(1) + 'M (' + (i.equityPct*100) + '% Equity)');
     ln('Financing:', (i.interestRate) + '% over ' + i.loanTerm + ' yrs');
@@ -998,7 +1135,9 @@ function downloadPDF() {
 function shareLink() {
     const params = new URLSearchParams();
     const map = {
-        chartTitle:'t', utilisation:'ut', purchasePrice:'p',
+        chartTitle:'t', ladenDays:'ld', ballastDays:'bd', idleDays:'id',
+        voyageCostPerLadenDay:'vcl', ballastCostPerDay:'bcd', idleCostPerDay:'icd',
+        purchasePrice:'p',
         equityPct:'e', interestRate:'ir', loanTerm:'lt', opex:'ox', spotComm:'sc', tcComm:'tcc',
         ffaY1:'fy1', ffaY2:'fy2', ffaY3:'fy3',
         tcBase:'tb', premiumMin:'pmin', premiumMax:'pmax', tcMin:'tm', tcMax:'tx',
@@ -1014,7 +1153,9 @@ function shareLink() {
 function loadFromURL() {
     const params = new URLSearchParams(location.search);
     const map = {
-        chartTitle:'t', utilisation:'ut', purchasePrice:'p',
+        chartTitle:'t', ladenDays:'ld', ballastDays:'bd', idleDays:'id',
+        voyageCostPerLadenDay:'vcl', ballastCostPerDay:'bcd', idleCostPerDay:'icd',
+        purchasePrice:'p',
         equityPct:'e', interestRate:'ir', loanTerm:'lt', opex:'ox', spotComm:'sc', tcComm:'tcc',
         ffaY1:'fy1', ffaY2:'fy2', ffaY3:'fy3',
         tcBase:'tb', premiumMin:'pmin', premiumMax:'pmax', tcMin:'tm', tcMax:'tx',
@@ -1034,6 +1175,7 @@ function closeChangelogOutside(e) { if(e.target.id === 'changelogOverlay') close
 
 window.addEventListener('DOMContentLoaded', () => {
     loadFromURL();
+    updateOperatingDisplay();
     updateFinanceDisplay();
     calculateDelta();
 });
