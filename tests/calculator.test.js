@@ -82,6 +82,8 @@ const sandbox = loadCalculatorSandbox();
 
 assert.equal(typeof sandbox.calculateSpotOperatingEconomics, 'function');
 assert.equal(typeof sandbox.calculateDecisionSnapshot, 'function');
+assert.equal(typeof sandbox.buildScenarioInputs, 'function');
+assert.equal(typeof sandbox.calculateAbsoluteDecisionMetrics, 'function');
 
 const sampleInputs = {
     spotDaysPerYear: 365,
@@ -115,5 +117,19 @@ const decision = sandbox.calculateDecisionSnapshot(sampleInputs, sampleInputs.tc
 assert.ok(typeof decision.relativeNpv === 'number');
 assert.ok(typeof decision.requiredPremium === 'number');
 assert.ok(decision.tcAnnualNetCashflow > decision.spotAnnualNetCashflow);
+
+const stressInputs = sandbox.buildScenarioInputs(sampleInputs, 'stress');
+const upsideInputs = sandbox.buildScenarioInputs(sampleInputs, 'upside');
+assert.ok(stressInputs.ladenDays < sampleInputs.ladenDays);
+assert.ok(stressInputs.opex > sampleInputs.opex);
+assert.ok(upsideInputs.ladenDays >= sampleInputs.ladenDays);
+
+const baseAbsolute = sandbox.calculateAbsoluteDecisionMetrics(sampleInputs, 'base');
+const stressAbsolute = sandbox.calculateAbsoluteDecisionMetrics(sampleInputs, 'stress');
+assert.ok(typeof baseAbsolute.spotEquityReturnPct === 'number');
+assert.ok(typeof baseAbsolute.tcEquityReturnPct === 'number');
+assert.ok(typeof baseAbsolute.conclusion === 'string');
+assert.ok(baseAbsolute.conclusion.includes('under these assumptions'));
+assert.ok(stressAbsolute.worstMonthlyCashBurn <= baseAbsolute.worstMonthlyCashBurn);
 
 console.log('calculator.test.js: PASS');

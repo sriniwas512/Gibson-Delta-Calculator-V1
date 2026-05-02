@@ -381,6 +381,72 @@ canvas {
     z-index: 3000;
     box-shadow: 0 4px 18px rgba(0,0,0,0.4);
 }
+
+.scenario-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+}
+.scenario-tab {
+    border: 1px solid #3d59a1;
+    background: #24283b;
+    color: #a9b1d6;
+    padding: 10px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: 700;
+    font-family: inherit;
+}
+.scenario-tab.active {
+    background: linear-gradient(135deg, #7aa2f7 0%, #3d59a1 100%);
+    color: #1a1b26;
+}
+.absolute-summary {
+    background: #16161e;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    border: 1px solid #292e42;
+}
+.decision-box {
+    background: #16161e;
+    border: 1px solid #292e42;
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+}
+.decision-box h4 {
+    color: #7aa2f7;
+    margin-bottom: 8px;
+    font-size: 1em;
+}
+.decision-box p,
+.decision-box li {
+    color: #a9b1d6;
+    line-height: 1.6;
+    font-size: 0.92em;
+}
+.decision-box ul {
+    margin-left: 18px;
+}
+
+@media (max-width: 1100px) {
+    .results-summary,
+    .absolute-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 720px) {
+    .results-summary,
+    .absolute-summary {
+        grid-template-columns: 1fr;
+    }
+}
 </style>
 </head>
 <body>
@@ -579,6 +645,21 @@ canvas {
                 <small style="color:#565f89">Used to calculate Net Present Value (NPV) of the spot vs TC spread.</small>
             </div>
 
+            <div class="input-group">
+                <h3>✅ Decision Thresholds</h3>
+                <div class="input-row inline-row">
+                    <div>
+                        <label for="hurdleRate">Target Equity Return %</label>
+                        <input type="number" id="hurdleRate" value="12" step="0.5" />
+                    </div>
+                    <div>
+                        <label for="minLiquidityBuffer">Minimum Liquidity Buffer ($M)</label>
+                        <input type="number" id="minLiquidityBuffer" value="1.5" step="0.1" />
+                    </div>
+                </div>
+                <small style="color:#565f89">These thresholds help separate “better than the alternative” from “actually acceptable”.</small>
+            </div>
+
             <!-- Buttons -->
             <div class="button-group">
                 <button class="calculate-btn" onclick="calculateDelta()">🔥 Calculate Analysis</button>
@@ -591,6 +672,11 @@ canvas {
         <!-- ====== RIGHT: CHART PANEL ====== -->
         <div class="chart-panel">
             <div class="error-banner" id="errorBanner"></div>
+            <div class="scenario-tabs">
+                <button class="scenario-tab active" id="scenarioBase" onclick="setScenario('base')">Base</button>
+                <button class="scenario-tab" id="scenarioStress" onclick="setScenario('stress')">Stress</button>
+                <button class="scenario-tab" id="scenarioUpside" onclick="setScenario('upside')">Upside</button>
+            </div>
 
             <div class="results-summary" id="results">
                 <div class="result-card">
@@ -613,6 +699,39 @@ canvas {
                     <div class="value cyan" id="cardAlpha">—</div>
                     <div class="sublabel">Extra earned per laden day needed for spot to match TC</div>
                 </div>
+            </div>
+
+            <div class="absolute-summary" id="absoluteResults">
+                <div class="result-card">
+                    <h4>Spot Equity Return</h4>
+                    <div class="value" id="cardSpotReturn">—</div>
+                    <div class="sublabel">Annual net cashflow divided by equity invested</div>
+                </div>
+                <div class="result-card">
+                    <h4>TC Equity Return</h4>
+                    <div class="value gold" id="cardTCReturn">—</div>
+                    <div class="sublabel">Annual net cashflow divided by equity invested</div>
+                </div>
+                <div class="result-card">
+                    <h4>Worst Monthly Cash Burn</h4>
+                    <div class="value negative" id="cardWorstBurn">—</div>
+                    <div class="sublabel">Most negative monthly run-rate across current scenario</div>
+                </div>
+                <div class="result-card">
+                    <h4>Hurdle Check</h4>
+                    <div class="value" id="cardHurdle">—</div>
+                    <div class="sublabel">Does either path clear your required return?</div>
+                </div>
+            </div>
+
+            <div class="decision-box">
+                <h4>Commercial Readout</h4>
+                <p id="conclusionText">—</p>
+            </div>
+
+            <div class="decision-box">
+                <h4>Model Footnote</h4>
+                <p id="footnoteText">This heatmap is a comparative decision aid, not a full voyage P&amp;L simulator. It simplifies the spot path into operating-day assumptions plus premium versus FFA and should be used alongside voyage-specific judgement.</p>
             </div>
 
             <div class="canvas-container">
@@ -641,6 +760,7 @@ let npvMatrix = null;
 let premiumLabels = [], tcLabels = [];
 let premiumValues = [], tcValues = [];
 let currentInputs = null;
+let currentScenario = 'base';
 
 // ---------- HELPERS ----------
 const fmtMoney  = n => '$' + Math.round(n).toLocaleString('en-US');
@@ -714,6 +834,38 @@ function calculateTCEconomics(ins, tcRate) {
     };
 }
 
+function buildScenarioInputs(ins, scenarioName) {
+    const scenario = scenarioName || 'base';
+    const next = { ...ins };
+
+    if (scenario === 'stress') {
+        next.ladenDays = Math.max(0, ins.ladenDays - 25);
+        next.ballastDays = ins.ballastDays + 10;
+        next.idleDays = ins.idleDays + 15;
+        next.opex = ins.opex * 1.08;
+        next.voyageCostPerLadenDay = ins.voyageCostPerLadenDay * 1.07;
+        next.ballastCostPerDay = ins.ballastCostPerDay * 1.08;
+        next.idleCostPerDay = ins.idleCostPerDay * 1.1;
+        next.tcBase = ins.tcBase * 0.97;
+        next.scenarioSpotAdjustment = -1000;
+    } else if (scenario === 'upside') {
+        next.ladenDays = Math.min(365, ins.ladenDays + 15);
+        next.ballastDays = Math.max(0, ins.ballastDays - 5);
+        next.idleDays = Math.max(0, ins.idleDays - 10);
+        next.opex = ins.opex * 0.97;
+        next.voyageCostPerLadenDay = ins.voyageCostPerLadenDay * 0.97;
+        next.ballastCostPerDay = ins.ballastCostPerDay * 0.96;
+        next.idleCostPerDay = ins.idleCostPerDay * 0.95;
+        next.tcBase = ins.tcBase * 1.02;
+        next.scenarioSpotAdjustment = 750;
+    } else {
+        next.scenarioSpotAdjustment = 0;
+    }
+
+    next.spotDaysPerYear = getSpotTotalDays(next);
+    return next;
+}
+
 function calculateDecisionSnapshot(ins, tcRate, spotPremium) {
     const spotBase = calculateSpotOperatingEconomics(ins, spotPremium, 1);
     const tcBase = calculateTCEconomics(ins, tcRate);
@@ -758,6 +910,46 @@ function calculateNPVCashflows(ins, spotPremium, tcRate) {
     return calculateDecisionSnapshot(ins, tcRate, spotPremium).relativeNpv;
 }
 
+function calculateAbsoluteDecisionMetrics(ins, scenarioName) {
+    const scenarioInputs = buildScenarioInputs(ins, scenarioName);
+    const snapshot = calculateDecisionSnapshot(
+        scenarioInputs,
+        scenarioInputs.tcBase,
+        scenarioInputs.scenarioSpotAdjustment || 0
+    );
+    const equityInvested = scenarioInputs.purchasePrice * scenarioInputs.equityPct;
+    const hurdle = scenarioInputs.hurdleRate / 100;
+    const spotEquityReturnPct = equityInvested === 0 ? 0 : (snapshot.spotAnnualNetCashflow / equityInvested) * 100;
+    const tcEquityReturnPct = equityInvested === 0 ? 0 : (snapshot.tcAnnualNetCashflow / equityInvested) * 100;
+    const worstMonthlyCashBurn = Math.min(snapshot.spotAnnualNetCashflow, snapshot.tcAnnualNetCashflow) / 12;
+    const bestReturnPct = Math.max(spotEquityReturnPct, tcEquityReturnPct);
+    const hurdleClear = bestReturnPct >= scenarioInputs.hurdleRate;
+    const liquidityNeeded = Math.max(0, -worstMonthlyCashBurn);
+    const liquidityBuffer = (scenarioInputs.minLiquidityBuffer || 0) * 1e6;
+
+    let winner = 'TC';
+    let edge = snapshot.tcAnnualNetCashflow - snapshot.spotAnnualNetCashflow;
+    if (snapshot.spotAnnualNetCashflow > snapshot.tcAnnualNetCashflow) {
+        winner = 'Spot';
+        edge = snapshot.spotAnnualNetCashflow - snapshot.tcAnnualNetCashflow;
+    }
+
+    const conclusion = `${winner} outperforms the alternative by ${fmtMoney(edge)} per year under these assumptions. ${hurdleClear ? 'At least one path clears your target equity return.' : 'Neither path clears your target equity return.'}`;
+
+    return {
+        scenarioInputs,
+        snapshot,
+        spotEquityReturnPct,
+        tcEquityReturnPct,
+        worstMonthlyCashBurn,
+        hurdleClear,
+        liquidityNeeded,
+        liquidityBuffer,
+        liquidityShortfall: liquidityNeeded > liquidityBuffer,
+        conclusion
+    };
+}
+
 function showError(message) {
     const banner = document.getElementById('errorBanner');
     banner.innerHTML = `<strong>Check inputs:</strong> ${message}`;
@@ -766,6 +958,26 @@ function showError(message) {
 
 function clearError() {
     document.getElementById('errorBanner').style.display = 'none';
+}
+
+function updateScenarioButtons() {
+    const ids = {
+        base: 'scenarioBase',
+        stress: 'scenarioStress',
+        upside: 'scenarioUpside'
+    };
+    Object.entries(ids).forEach(([name, id]) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.className = `scenario-tab${name === currentScenario ? ' active' : ''}`;
+        }
+    });
+}
+
+function setScenario(name) {
+    currentScenario = name;
+    updateScenarioButtons();
+    calculateDelta();
 }
 
 // ---------- UI SYNC ----------
@@ -836,7 +1048,9 @@ function readInputs() {
         tcMin: parseFloat(document.getElementById('tcMin').value),
         tcMax: parseFloat(document.getElementById('tcMax').value),
         charterDuration: parseFloat(document.getElementById('charterDuration').value),
-        wacc: parseFloat(document.getElementById('wacc').value)
+        wacc: parseFloat(document.getElementById('wacc').value),
+        hurdleRate: parseFloat(document.getElementById('hurdleRate').value),
+        minLiquidityBuffer: parseFloat(document.getElementById('minLiquidityBuffer').value)
     };
 }
 
@@ -870,7 +1084,9 @@ function calculateDelta() {
         showError(`Spot operating days currently total ${Math.round(totalDays)}. For an annual comparison, keep this close to 365.`);
     }
 
-    const snapshot = calculateDecisionSnapshot(ins, ins.tcBase, 0);
+    const absolute = calculateAbsoluteDecisionMetrics(ins, currentScenario);
+    const scenarioInputs = absolute.scenarioInputs;
+    const snapshot = absolute.snapshot;
 
     // Update Cards
     const scard = document.getElementById('cardSpot');
@@ -889,10 +1105,31 @@ function calculateDelta() {
     acard.textContent = fmtSigned(snapshot.requiredPremium) + '/d';
     acard.className = 'value ' + (snapshot.requiredPremium <= 0 ? 'positive' : 'negative');
 
+    const spotReturn = document.getElementById('cardSpotReturn');
+    spotReturn.textContent = `${absolute.spotEquityReturnPct.toFixed(1)}%`;
+    spotReturn.className = 'value ' + (absolute.spotEquityReturnPct >= ins.hurdleRate ? 'positive' : 'negative');
+
+    const tcReturn = document.getElementById('cardTCReturn');
+    tcReturn.textContent = `${absolute.tcEquityReturnPct.toFixed(1)}%`;
+    tcReturn.className = 'value ' + (absolute.tcEquityReturnPct >= ins.hurdleRate ? 'gold' : 'negative');
+
+    const burnCard = document.getElementById('cardWorstBurn');
+    burnCard.textContent = fmtSigned(absolute.worstMonthlyCashBurn);
+    burnCard.className = 'value ' + (absolute.worstMonthlyCashBurn >= 0 ? 'positive' : 'negative');
+
+    const hurdleCard = document.getElementById('cardHurdle');
+    hurdleCard.textContent = absolute.hurdleClear ? 'Pass' : 'Fail';
+    hurdleCard.className = 'value ' + (absolute.hurdleClear ? 'positive' : 'negative');
+
+    document.getElementById('conclusionText').textContent =
+        `${absolute.conclusion} Scenario: ${currentScenario}. Liquidity buffer is ${absolute.liquidityShortfall ? 'below' : 'above'} the current worst monthly burn requirement.`;
+    document.getElementById('footnoteText').textContent =
+        `This ${currentScenario} scenario is still a simplified comparative model. It helps compare spot and TC under consistent assumptions, but it does not replace voyage-by-voyage P&L, bunker, port, or optionality analysis.`;
+
     // Heatmap matrices
     const N = 10;
     premiumValues = Array.from({length: N}, (_, i) => ins.premiumMin + (ins.premiumMax - ins.premiumMin)*i/(N-1));
-    tcValues = Array.from({length: N}, (_, i) => ins.tcMin + (ins.tcMax - ins.tcMin)*i/(N-1));
+    tcValues = Array.from({length: N}, (_, i) => scenarioInputs.tcMin + (scenarioInputs.tcMax - scenarioInputs.tcMin)*i/(N-1));
     
     premiumLabels = premiumValues.map(v => (v >= 0 ? '+' : '') + fmtMoney(v));
     tcLabels = tcValues.map(fmtMoney);
@@ -902,7 +1139,7 @@ function calculateDelta() {
     for (let i = 0; i < N; i++) {
         const npvRow = [];
         for (let j = 0; j < N; j++) {
-            npvRow.push(calculateNPVCashflows(ins, premiumValues[j], tcValues[i]));
+            npvRow.push(calculateNPVCashflows(scenarioInputs, premiumValues[j] + (scenarioInputs.scenarioSpotAdjustment || 0), tcValues[i]));
         }
         npvMatrix.push(npvRow);
     }
@@ -1106,6 +1343,7 @@ function downloadPDF() {
         pdf.setFont(undefined, 'normal'); pdf.text(val, 60, y); y += 5;
     };
     const i = currentInputs;
+    const absolute = calculateAbsoluteDecisionMetrics(i, currentScenario);
     ln('Laden / Ballast / Idle:', `${i.ladenDays} / ${i.ballastDays} / ${i.idleDays} days`);
     ln('Spot Variable Costs:', `Laden ${fmtMoney(i.voyageCostPerLadenDay)} | Ballast ${fmtMoney(i.ballastCostPerDay)} | Idle ${fmtMoney(i.idleCostPerDay)}`);
     y+=2;
@@ -1117,10 +1355,13 @@ function downloadPDF() {
     ln('Daily OpEx:', fmtMoney(i.opex));
     ln('Total Cash Break-even:', fmtMoney(i.opex + dpi));
     y+=2;
+    ln('Scenario:', currentScenario);
     ln('Charter Term:', i.charterDuration + ' years (Discount: ' + i.wacc + '%)');
+    ln('Target Equity Return:', i.hurdleRate + '%');
     ln('Commissions:', 'Spot ' + (i.spotComm*100) + '% | TC ' + (i.tcComm*100) + '%');
     y+=2;
     ln('FFA Curve Base:', `Y1: ${fmtMoney(i.ffaY1)} | Y2: ${fmtMoney(i.ffaY2)} | Y3+: ${fmtMoney(i.ffaY3)}`);
+    ln('Commercial Readout:', absolute.conclusion);
     
     // Canvas
     const canvas = document.createElement('canvas');
@@ -1141,9 +1382,10 @@ function shareLink() {
         equityPct:'e', interestRate:'ir', loanTerm:'lt', opex:'ox', spotComm:'sc', tcComm:'tcc',
         ffaY1:'fy1', ffaY2:'fy2', ffaY3:'fy3',
         tcBase:'tb', premiumMin:'pmin', premiumMax:'pmax', tcMin:'tm', tcMax:'tx',
-        charterDuration:'cd', wacc:'wc'
+        charterDuration:'cd', wacc:'wc', hurdleRate:'hr', minLiquidityBuffer:'mlb'
     };
     for(const k in map) params.set(map[k], document.getElementById(k).value);
+    params.set('sn', currentScenario);
     const url = `${location.origin}${location.pathname}?${params.toString()}`;
     navigator.clipboard.writeText(url).then(()=>{
         const t = document.getElementById('shareToast');
@@ -1159,13 +1401,16 @@ function loadFromURL() {
         equityPct:'e', interestRate:'ir', loanTerm:'lt', opex:'ox', spotComm:'sc', tcComm:'tcc',
         ffaY1:'fy1', ffaY2:'fy2', ffaY3:'fy3',
         tcBase:'tb', premiumMin:'pmin', premiumMax:'pmax', tcMin:'tm', tcMax:'tx',
-        charterDuration:'cd', wacc:'wc'
+        charterDuration:'cd', wacc:'wc', hurdleRate:'hr', minLiquidityBuffer:'mlb'
     };
     for(const k in map) {
         if(params.has(map[k])) {
             const el = document.getElementById(k);
             if(el) el.value = params.get(map[k]);
         }
+    }
+    if (params.has('sn')) {
+        currentScenario = params.get('sn');
     }
 }
 
@@ -1175,6 +1420,7 @@ function closeChangelogOutside(e) { if(e.target.id === 'changelogOverlay') close
 
 window.addEventListener('DOMContentLoaded', () => {
     loadFromURL();
+    updateScenarioButtons();
     updateOperatingDisplay();
     updateFinanceDisplay();
     calculateDelta();
