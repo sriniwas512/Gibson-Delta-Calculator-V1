@@ -1,3 +1,4 @@
+Still Under Construction. Few more weeks to work neatly!
 # Gibson Spot vs TC Delta Calculator V1 ⚓
 
 A high-performance, interactive analytical tool for maritime professionals to compare the financial viability of Spot Trading vs. Time Charter (TC) contracts.
